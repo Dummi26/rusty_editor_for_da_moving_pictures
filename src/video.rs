@@ -1,6 +1,4 @@
-use std::sync::{Arc, Mutex};
-
-use image::{DynamicImage, GenericImageView, GenericImage};
+use image::{DynamicImage, GenericImageView, GenericImage, Pixel, Rgba};
 
 use crate::{curve::Curve, video_cached_frames::VideoCachedFrames, video_render_settings::VideoRenderSettings};
 
@@ -12,6 +10,8 @@ pub struct Video {
     pub set_length: f64,
     /// The video
     pub video: VideoType,
+    /// Post-Processing, effectively
+    pub transparency_adjustments: TransparencyAdjustments<Curve>,
     // - -     -     - -
     // done: The values that are set after drawing
     /// Due to caching, the rendered image might not be exactly the desired one. If this is the case, this value will differ from the progress used by draw() etc.
@@ -26,9 +26,10 @@ impl Video {
             set_pos: Pos { x: Curve::Constant(0.0), y: Curve::Constant(0.0), w: Curve::Constant(1.0), h: Curve::Constant(1.0) },
             set_start_frame: 0.0,
             set_length: 1.0,
+            video,
+            transparency_adjustments: TransparencyAdjustments::None,
             done_actual_progress: 0.0,
             last_draw: VideoCachedFrames::new(),
-            video,
         }
     }
     pub fn new_full_size(start_frame: f64, length: f64, video: VideoType) -> Self {
@@ -36,9 +37,10 @@ impl Video {
             set_pos: Pos { x: Curve::Constant(0.0), y: Curve::Constant(0.0), w: Curve::Constant(1.0), h: Curve::Constant(1.0) },
             set_start_frame: start_frame,
             set_length: length,
+            video,
+            transparency_adjustments: TransparencyAdjustments::None,
             done_actual_progress: 0.0,
             last_draw: VideoCachedFrames::new(),
-            video,
         }
     }
     pub fn new(pos: Pos<Curve, Curve>, start_frame: f64, length: f64, video: VideoType) -> Self {
@@ -46,9 +48,10 @@ impl Video {
             set_pos: pos,
             set_start_frame: start_frame,
             set_length: length,
+            video,
+            transparency_adjustments: TransparencyAdjustments::None,
             done_actual_progress: 0.0,
             last_draw: VideoCachedFrames::new(),
-            video,
         }
     }
 
@@ -63,6 +66,7 @@ impl Video {
         Some(PrepDrawData {
             position: self.set_pos.convert(&|c| c.get_value(progress)),
             progress,
+            transparency_adjustments: self.transparency_adjustments.clone(),
             _private: (),
         })
     }
@@ -70,6 +74,7 @@ impl Video {
 pub struct PrepDrawData {
     pub progress: f64,
     pub position: Pos<f64, f64>,
+    pub transparency_adjustments: TransparencyAdjustments<Curve>,
     /// This prevents construction of this struct
     _private: (),
 }
@@ -80,10 +85,12 @@ impl Video {
         //
         let pos = Pos { x: (prep_data.position.x * img.width() as f64).round() as i32, y: (prep_data.position.y * img.height() as f64).round() as i32, w: (prep_data.position.w * img.width() as f64).round() as u32, h: (prep_data.position.h * img.height() as f64).round() as u32 };
         //
-        self.draw2(img, prep_data.progress, pos, render_settings);
+        self.draw2(img, prep_data, pos, render_settings);
     }
 
-    fn draw2(&mut self, image: &mut DynamicImage, progress: f64, pos: Pos<i32, u32>, render_settings: &VideoRenderSettings) {
+    fn draw2(&mut self, image: &mut DynamicImage, prep_data: PrepDrawData, pos: Pos<i32, u32>, render_settings: &VideoRenderSettings) {
+        
+        let progress = prep_data.progress;
 
         {
             let cached_frames_of_correct_resolution = if render_settings.allow_retrieval_of_cached_frames != None { self.last_draw.with_resolution(pos.w, pos.h) } else { None };
@@ -93,7 +100,7 @@ impl Video {
                         Some((dist, frame)) => {
                             if dist <= render_settings.allow_retrieval_of_cached_frames.expect("This always exists because for cfocr to be Some, arocf cannot be none.") {
                                 self.done_actual_progress = frame.progress;
-                                draw_to_canvas(image, &pos, &frame.frame);
+                                draw_to_canvas(image, &pos, &frame.frame, prep_data.transparency_adjustments.convert(&|c| c.get_value(progress) as f32));
                                 return; // drawing from cache, return to prevent rendering
                             };
                         },
@@ -107,12 +114,11 @@ impl Video {
             // Rendering
             let img = self.create_rendered_image(&pos, progress, render_settings);
             // Drawing
-            draw_to_canvas(image, &pos, &img);
+            draw_to_canvas(image, &pos, &img, prep_data.transparency_adjustments.convert(&|c| c.get_value(progress) as f32));
             // Caching
             self.last_draw.add_frame(progress, pos.w, pos.h, img);
         };
-        
-        fn draw_to_canvas(image: &mut DynamicImage, pos: &Pos<i32, u32>, img: &DynamicImage) {
+        fn draw_to_canvas(image: &mut DynamicImage, pos: &Pos<i32, u32>, img: &DynamicImage, transparency_adjustments: TransparencyAdjustments<f32>) {
 
             // Draw frame to canvas
     
@@ -134,11 +140,52 @@ impl Video {
                 { continue; };
                 let (x, y) = (add(pos.x, x), add(pos.y, y));
                 if x >= image.width() || y >= image.height() { continue; };
-                image.put_pixel(x, y, pixel);
+                let px = image.get_pixel(x, y);
+                let [nr, ng, nb, na] = pixel.0;
+                let [or, og, ob, oa] = px.0;
+                let alpha = match transparency_adjustments {
+                    TransparencyAdjustments::None => na as f32 / 255.0,
+                    TransparencyAdjustments::Force(v) => v,
+                    TransparencyAdjustments::Factor(f) => na as f32 * f / 255.0,
+                    TransparencyAdjustments::ForceOpaqueIfNotTransparent => if na == 0 { 0.0 } else { 1.0 },
+                };
+                if alpha == 0.0 {} // nothing
+                else if alpha == 1.0 { // opaque
+                    image.put_pixel(x, y, *Rgba::from_slice(&[nr, ng, nb, 255]));
+                } else { // transparency
+                    let a2 = 1.0 - alpha;
+                    image.put_pixel(x, y, *Rgba::from_slice(&[
+                        (or as f32 * a2 + nr as f32 * alpha).round() as u8,
+                        (og as f32 * a2 + ng as f32 * alpha).round() as u8,
+                        (ob as f32 * a2 + nb as f32 * alpha).round() as u8,
+                        255
+                    ]));
+                };
             };
         
         }
     }
+}
+
+#[derive(Clone)]
+pub enum TransparencyAdjustments<T> {
+    None,
+    Force(T),
+    Factor(T),
+    ForceOpaqueIfNotTransparent,
+}
+impl<T> TransparencyAdjustments<T> {
+    pub fn convert<F, R>(self, f: &F) -> TransparencyAdjustments<R> where F: Fn(T) -> R {
+        match self {
+            Self::None => TransparencyAdjustments::None,
+            Self::Force(t) => TransparencyAdjustments::Force(f(t)),
+            Self::Factor(t) => TransparencyAdjustments::Factor(f(t)),
+            Self::ForceOpaqueIfNotTransparent => TransparencyAdjustments::ForceOpaqueIfNotTransparent,
+        }
+    }
+}
+
+impl Video {
 
 
     /// This function does not put the image into the cache automatically. To do that, use self.last_draw.add_frame(?, ?, ?, create_rendered_image(...))

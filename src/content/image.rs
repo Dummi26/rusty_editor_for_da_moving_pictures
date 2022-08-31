@@ -53,7 +53,7 @@ impl Image {
     }
     pub fn draw(&mut self, image: &mut DynamicImage, scaling_filter: FilterType) {
         let img = self.get_img_scaled(image.width(), image.height(), scaling_filter);
-        //for pixel in img.pixels() { let (x, y, pixel) = (pixel.0, pixel.1, pixel.2); image.put_pixel(x, y, pixel); };
+        //for pixel in img.pixels() { let (x, y, mut pixel) = (pixel.0, pixel.1, pixel.2); image.put_pixel(x, y, pixel); };
         *image = img.clone();
     }
 }

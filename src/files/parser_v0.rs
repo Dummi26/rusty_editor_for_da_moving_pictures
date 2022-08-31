@@ -1,6 +1,6 @@
-use std::{str::Chars, path::PathBuf};
+use std::{str::{Chars, FromStr}, path::PathBuf, string::ParseError};
 
-use crate::{video::{Video, Pos, VideoType}, project::{Project, ProjectData}, curve::Curve, effect::{effects, Effect}, input_video::InputVideo, multithreading::automatically_cache_frames::VideoWithAutoCache};
+use crate::{video::{Video, Pos, VideoType, TransparencyAdjustments}, project::{Project, ProjectData}, curve::Curve, effect::{effects, Effect}, input_video::InputVideo, multithreading::automatically_cache_frames::VideoWithAutoCache};
 
 use super::parser_general::ParserError;
 
@@ -44,6 +44,7 @@ fn parse_vid(chars: &mut Chars) -> Result<Video, ParserError> {
     let mut start = None;
     let mut length = None;
     let mut video = None;
+    let mut transparency_adjustments = crate::video::TransparencyAdjustments::None;
     'before_return: loop {
         let mut identifier = String::new();
         loop {
@@ -59,11 +60,22 @@ fn parse_vid(chars: &mut Chars) -> Result<Video, ParserError> {
             "start" => start = Some(parse_vid_f64(chars)?),
             "length" => length = Some(parse_vid_f64(chars)?),
             "video" => video = Some(parse_vid_video(chars)?),
+            "transparency_adjustments" => transparency_adjustments = match chars.next() {
+                Some('=') => TransparencyAdjustments::Force(parse_vid_curve(chars)?),
+                Some('*') => TransparencyAdjustments::Factor(parse_vid_curve(chars)?),
+                Some('L') => TransparencyAdjustments::ForceOpaqueIfNotTransparent, // because plotting this would result in an upside-down L.
+                Some(ch) => return Err(ParserError::InvalidTransparencyAdjustmentIdentifier(ch)),
+                None => return Err(ParserError::UnexpectedEOF),
+            },
             _ => return Err(ParserError::InvalidVideoInfoKey(identifier)),
         };
     };
     match (pos, start, length, video) {
-        (Some(pos), Some(start_frame), Some(length), Some(video)) => Ok(Video::new(pos, start_frame, length, video)),
+        (Some(pos), Some(start_frame), Some(length), Some(video)) => Ok({
+            let mut vid = Video::new(pos, start_frame, length, video);
+            vid.transparency_adjustments = transparency_adjustments;
+            vid
+        }),
         (None, _, _, _) => Err(ParserError::MissingVideoInfoKey(format!("pos"))),
         (_, None, _, _) => Err(ParserError::MissingVideoInfoKey(format!("start"))),
         (_, _, None, _) => Err(ParserError::MissingVideoInfoKey(format!("length"))),
@@ -88,6 +100,7 @@ fn parse_vid_video(chars: &mut Chars) -> Result<VideoType, ParserError> {
     loop {
         match chars.next() {
             Some(':') => break,
+            Some(' ' | '\t') => continue,
             Some(ch) => identifier.push(ch),
             None => return Err(ParserError::UnexpectedEOF),
         };
@@ -109,8 +122,54 @@ fn parse_vid_video(chars: &mut Chars) -> Result<VideoType, ParserError> {
                 }
             };
             VideoType::WithEffect(Box::new(video_data), match effect_name.as_str() {
+                "None" => Effect::new(effects::Nothing {}),
                 "BlackWhite" => Effect::new(effects::BlackWhite {}),
                 "Shake" => Effect::new(effects::Shake {shake_dist_x: parse_vid_f64(chars)?, shake_dist_y: parse_vid_f64(chars)?, shakes_count_x: parse_vid_f64(chars)?, shakes_count_y: parse_vid_f64(chars)?, }),
+                "ChangeSpeed" => Effect::new(effects::ChangeSpeed { time: parse_vid_curve(chars)?, }),
+                "Blur" => Effect::new(effects::Blur { mode: {
+                    let mut identifier = String::new();
+                    loop {
+                        match chars.next() {
+                            Some(':') => break,
+                            Some(ch) => identifier.push(ch),
+                            None => return Err(ParserError::UnexpectedEOF),
+                        };
+                    };
+                    match identifier.as_str() {
+                        "Square" => effects::Blur_Mode::Square { radius: parse_vid_curve(chars)?, },
+                        "Downscale" => effects::Blur_Mode::Downscale { width: parse_vid_curve(chars)?, height: parse_vid_curve(chars)?, },
+                        _ => return Err(ParserError::EffectParseError { effect_identifier: effect_name, custom_error: format!("Blur mode '{identifier}' does not exist! Try Square (Curve) or Downscale (Curve + Curve)"), }),
+                    }
+                }, }),
+                "ColorAdjust" => Effect::new(effects::ColorAdjust { mode: {
+                    let mut identifier = String::new();
+                    loop {
+                        match chars.next() {
+                            Some(':') => break,
+                            Some(ch) => identifier.push(ch),
+                            None => return Err(ParserError::UnexpectedEOF),
+                        };
+                    };
+                    match identifier.as_str() {
+                        "rgba" => effects::ColorAdjust_Mode::Rgba(parse_vid_curve(chars)?, parse_vid_curve(chars)?, parse_vid_curve(chars)?, parse_vid_curve(chars)?),
+                        _ => return Err(ParserError::EffectParseError { effect_identifier: effect_name, custom_error: format!("'{}' is not a valid ColorAdjustMode. Try rgba:RGBA where R,G,B,A are Curve.", identifier), })
+                    }
+                }, }),
+                "ColorKey" => Effect::new(effects::ColorKey { mode: {
+                    let mut identifier = String::new();
+                    loop {
+                        match chars.next() {
+                            Some(':') => break,
+                            Some(ch) => identifier.push(ch),
+                            None => return Err(ParserError::UnexpectedEOF),
+                        };
+                    };
+                    match identifier.as_str() {
+                        "rgb_eq" => effects::ColorKey_Mode::TransparentIfMatches((parse_vid_int(chars)?, parse_vid_int(chars)?, parse_vid_int(chars)?)),
+                        "rgb_rng" => effects::ColorKey_Mode::TransparentIfRange(((parse_vid_int(chars)?, parse_vid_int(chars)?), (parse_vid_int(chars)?, parse_vid_int(chars)?), (parse_vid_int(chars)?, parse_vid_int(chars)?))),
+                        _ => return Err(ParserError::EffectParseError { effect_identifier: effect_name, custom_error: format!("'{}' is not a valid ColorKeyMode. Try rgb_eq:R;G;B where R,G,B are int-u8, or rgb_rng:R1;R2;G1;G2;B1;B2 where R1,R2,G1,G2,B1,B2 are int-u8.", identifier), })
+                    }
+                }, }),
                 _ => return Err(ParserError::UnknownEffect(effect_name)),
             })
         },
@@ -162,38 +221,77 @@ fn parse_vid_video(chars: &mut Chars) -> Result<VideoType, ParserError> {
 }
 
 fn parse_vid_curve(chars: &mut Chars) -> Result<Curve, ParserError> {
-    Ok(match chars.next() {
-        Some('=') => Curve::Constant(parse_vid_f64(chars)?),
-        Some('/') => Curve::Linear(parse_vid_f64(chars)?, parse_vid_f64(chars)?),
-        Some('#') => Curve::Chain(
-            {
-                let mut vec = Vec::new();
-                loop {
-                    match chars.next() {
-                        Some('+') => {
-                            let f = parse_vid_f64(chars)?;
-                            vec.push((parse_vid_curve(chars)?, f));
-                        },
-                        None => return Err(ParserError::UnexpectedEOF),
-                        Some(_ /* preferrably # for clarity, but can be any character except +. */) => break,
+    Ok(loop { break match chars.next() {
+        Some(char) => match char {
+            ' ' | '\t' => continue,
+            '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | '.' => Curve::Constant(parse_vid_f64_prepend(String::from(char), chars)?),
+            '/' => Curve::Linear(parse_vid_curve(chars)?.b(), parse_vid_curve(chars)?.b()),
+            's' => Curve::SmoothFlat(parse_vid_curve(chars)?.b(), parse_vid_curve(chars)?.b()),
+            '#' => Curve::Chain(
+                {
+                    let mut vec = Vec::new();
+                    loop {
+                        match chars.next() {
+                            Some('+') => {
+                                let f = parse_vid_f64(chars)?;
+                                vec.push((parse_vid_curve(chars)?, f));
+                            },
+                            None => return Err(ParserError::UnexpectedEOF),
+                            Some(_ /* preferrably # for clarity, but can be any character except +. */) => break,
+                        };
                     };
-                };
-                vec
-            }
-        ),
-        _ => return Err(ParserError::UnexpectedEOF),
-    })
+                    vec
+                }
+            ),
+            _ => return Err(ParserError::InvalidCurveIdentifier(char)),
+        },
+        None => return Err(ParserError::UnexpectedEOF),
+    }; })
 }
 
+fn parse_vid_int<T>(chars: &mut Chars) -> Result<T, ParserError> where T: FromStr<Err = std::num::ParseIntError> {
+    match parse_vid_to_next_semicolon_errors(String::new(), chars)?.parse() {
+        Ok(v) => Ok(v),
+        Err(err) => Err(ParserError::ParseIntError(err)),
+    }
+}
+
+fn parse_vid_f64_prepend(prepend: String, chars: &mut Chars) -> Result<f64, ParserError> {
+    match parse_vid_to_next_semicolon_errors(prepend, chars)?.parse() {
+        Ok(v) => Ok(v),
+        Err(err) => Err(ParserError::ParseFloatError(err)),
+    }
+}
 fn parse_vid_f64(chars: &mut Chars) -> Result<f64, ParserError> {
-    let mut str = String::new();
+    parse_vid_f64_prepend(String::new(), chars)
+}
+
+/// Same as the one without _errors, but (Ok(s), _) becomes Ok(s) while (Err(s), _) becomes Err(ParserError::UnexpectedEOF)
+fn parse_vid_to_next_semicolon_errors(prepend: String, chars: &mut Chars) -> Result<String, ParserError> {
+    if let Ok(text) = parse_vid_to_next_semicolon(prepend, chars).0 {
+        println!("Text: {}", &text);
+        Ok(text)
+    } else {
+        Err(ParserError::UnexpectedEOF)
+    }
+}
+
+/// The first tuple member can be Ok(prepend+chars) where chars are all chars until the first semicolon
+///                           or Err(prepend+chars) where chars are all chars until the iterator returned None.
+/// The second tuple member can be discarded, it contains mostly debugging information. See the fn definition for more info.
+fn parse_vid_to_next_semicolon(mut prepend: String, chars: &mut Chars) -> (Result<String, String>, (u32, u32)) {
+    let mut chars_added = 0;
+    let mut chars_discarded = 0;
     loop {
         match chars.next() {
-            Some(ch) => match ch {
-                ';' => return match str.parse() { Ok(v) => Ok(v), Err(err) => Err(ParserError::ParseFloatError(err)), },
-                _ => str.push(ch),
+            Some(';') => break,
+            Some(' ' | '\t') => chars_discarded += 1,
+            Some(ch) => {
+                prepend.push(ch);
+                chars_added += 1;
             },
-            None => return Err(ParserError::UnexpectedEOF),
+            None => return (Err(prepend), (chars_added, chars_discarded)),
         };
     };
+    return (Ok(prepend), (chars_added, chars_discarded))
 }

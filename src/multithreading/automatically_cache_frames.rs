@@ -1,4 +1,4 @@
-use std::{thread::{self, JoinHandle}, time::Duration};
+use std::{thread::{self, JoinHandle}, time::{Duration, Instant}};
 
 use crate::video::Video;
 use std::sync::{Arc, Mutex};
@@ -77,8 +77,11 @@ impl VideoWithAutoCache {
         let video_data = self.data.clone();
         self.thread = Some(thread::spawn(move || {
             let sleep_duration = Duration::from_millis(250);
+            //
+            let mut frames_count = 0u128;
             // 'outer indicates that breaking from this loop will immedeately end the thread.
             'outer: loop {
+                let start_time = Instant::now();
                 let (width, height, vid_arc, commands) = { // minimize the duration of the lock on video_data (self.data @ VideoWithAutoCache)
                     let mut data = video_data.lock().unwrap();
                     let mut commands = Vec::with_capacity(data.commands.len());
@@ -102,15 +105,18 @@ impl VideoWithAutoCache {
                             vid.last_draw.with_resolution(width, height)
                         }; // lock on vid is dropped again
                         if let Some(last_draw) = last_draw {
-                            last_draw.lock().unwrap().get_most_useful_index_for_caching() // lock on last_draw is dropped again
+                            let (index, dist) = last_draw.lock().unwrap().get_most_useful_index_for_caching(); // lock on last_draw is dropped again
+                            if dist > 0.01 { Some(index) } else { None }
                         } else {
-                            1.0
+                            None
                         }
                     };
-                    {
+                    if let Some(optimal_caching_index) = optimal_caching_index {
                         let mut vid = vid_arc.lock().unwrap(); // lock the mutex of the actual video while - THIS IS NOT WHAT WE WANT TO DO
                         if let Some(prep_data) = vid.prep_draw(optimal_caching_index) {
-                            vid.draw(&mut image::DynamicImage::new_rgba8(width, height), prep_data, &crate::video_render_settings::VideoRenderSettings::perfect_but_slow());
+                            vid.draw(&mut image::DynamicImage::new_rgba8(width, height), prep_data, &crate::video_render_settings::VideoRenderSettings::caching_thread());
+                            frames_count += 1;
+                            eprintln!("[bg.c] Took {}ms to draw #{}. [{optimal_caching_index}]", start_time.elapsed().as_millis(), frames_count);
                         } else {
                         };
                     };

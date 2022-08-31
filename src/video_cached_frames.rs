@@ -106,17 +106,18 @@ impl VideoCachedFramesOfCertainResolutionData {
         self.cached_frames.insert(0, VideoCachedFrame { progress: progress, frame: frame });
     }
 
-    pub fn get_most_useful_index_for_caching(&self) -> f64 {
+    /// Returns the index and its distance to the nearest cached frame.
+    pub fn get_most_useful_index_for_caching(&self) -> (f64, f64) {
         let mut progress = Vec::with_capacity(self.cached_frames.len() + 1);
         for cached_frame in self.cached_frames.iter() {
             progress.push(cached_frame.progress);
         };
-        if progress.last() != Some(&1.0) { progress.push(1.0); };
+        if let Some(last) = progress.last() { if *last != 1.0 { progress.push(1.0); }; };
         let max = u64::MAX as f64; // good enough, probably
         progress.sort_unstable_by_key(|item| (item * max).floor() as u64);
         let mut pval = 0.0;
-        let mut best_dist = 0.0;
-        let mut optimal_index = 1.0;
+        let mut best_dist = -2.0;
+        let mut optimal_index = 0.0;
         for prog in progress.into_iter() {
             let dist = prog - pval;
             if dist > best_dist {
@@ -125,7 +126,7 @@ impl VideoCachedFramesOfCertainResolutionData {
             };
             pval = prog;
         };
-        optimal_index
+        (optimal_index, best_dist.abs())
     }
 }
 
