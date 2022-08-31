@@ -1,0 +1,38 @@
+IMPORTANT:
+    Do not depend on newlines, only on braces!
+    When the file is initially read, all newlines (including \n\r) will be removed and all leading spaced or tabs will be removed per-line.
+    Exception: The first line contains ONLY the file version.
+
+[(file)]
+
+/*version as "major.minor\n" where the major.newest loader works with all major.* versions*/
+proj:
+/*project info*/
+
+vid:
+/*video info*/
+
+
+
+[(project info)]
+
+
+
+
+[(video info)]
+
+pos:/*4 positions terminated by semicolon*/
+start:/*float terminated by semicolon*/
+length:/*same as start*/
+video:/*type without ':'*/:/*video type data*/
+
+
+
+[(video type data)]
+
+List:
+    /* video data back to back, always prefixed with '+', then finally terminated by a ; */
+WithEffect:
+    /* video data *//* effect name */:/* effect data (parsed by each effect?) */
+Raw:
+    /*images_directory with / as path separator, even on windows, terminated by a final \. All /s will be replaced with \s on windows.*/

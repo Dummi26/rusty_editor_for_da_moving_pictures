@@ -1,0 +1,15 @@
+[package]
+name = "rusty_editor_for_da_moving_pictures"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+image = "0.24.2"
+colored = "2"
+term_size = "0.3.2"
+# vid2img = "0.1.0"
+
+egui = "0.18.1"
+eframe = "0.18.0"
