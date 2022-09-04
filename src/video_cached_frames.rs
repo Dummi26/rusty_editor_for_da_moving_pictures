@@ -1,48 +1,63 @@
-use std::sync::{Arc, Mutex};
+use std::{sync::{Arc, Mutex}, thread::{self, JoinHandle}};
 
 use image::DynamicImage;
 
 pub struct VideoCachedFrames {
     resolutions: Vec<VideoCachedFramesOfCertainResolution>,
+    max_resolutions: usize,
 }
 impl VideoCachedFrames {
     pub fn new() -> Self {
         Self {
             resolutions: Vec::new(),
+            max_resolutions: 1,
         }
     }
     
-    pub fn with_resolution(&mut self, width: u32, height: u32) -> Option<Arc<Mutex<VideoCachedFramesOfCertainResolutionData>>> {
-        for res in self.resolutions.iter_mut() {
+    pub fn with_resolution(&self, width: u32, height: u32) -> Option<VideoCachedFramesOfCertainResolution> {
+        for res in self.resolutions.iter() {
             if res.width == width && res.height == height {
-                return Some(res.cached_frames.clone());
+                return Some(res.clone());
             };
         };
         None
     }
-    pub fn with_resolution_or_create(&mut self, width: u32, height: u32) -> Arc<Mutex<VideoCachedFramesOfCertainResolutionData>> {
-        for res in self.resolutions.iter_mut() {
+    pub fn with_resolution_or_create(&mut self, width: u32, height: u32) -> VideoCachedFramesOfCertainResolution {
+        for res in self.resolutions.iter() {
             if res.width == width && res.height == height {
-                return res.cached_frames.clone();
+                return res.clone();
             };
         };
-        let new = Arc::new(Mutex::new(VideoCachedFramesOfCertainResolutionData::new(width, height)));
-        self.resolutions.insert(0, VideoCachedFramesOfCertainResolution { width, height, cached_frames: new.clone(), });
+        let new = VideoCachedFramesOfCertainResolution::new(width, height);
+        self.add_resolution(new.clone());
         new
     }
     
+    fn add_resolution(&mut self, res: VideoCachedFramesOfCertainResolution) {
+        if self.resolutions.len() >= self.max_resolutions { self.resolutions.pop(); };
+        self.resolutions.insert(0, res);
+    }
+    
+    pub fn clear_resolutions(&mut self) {
+        for res in &mut self.resolutions {
+            res.clear();
+        };
+        self.resolutions.clear();
+    }
+    
     pub fn add_frame(&mut self, progress: f64, width: u32, height: u32, frame: DynamicImage) {
-        self.with_resolution_or_create(width, height).lock().unwrap().add_frame(progress, frame);
+        self.with_resolution_or_create(width, height).cache().lock().unwrap().add_frame(progress, frame);
     }
     pub fn add_frames<T>(&mut self, width: u32, height: u32, prog_and_frames: T) where T: IntoIterator<Item=(f64, DynamicImage)> {
         let res = self.with_resolution_or_create(width, height);
-        let mut res = res.lock().unwrap();
+        let mut res = res.cache().lock().unwrap();
         for (progress, frame) in prog_and_frames {
             res.add_frame(progress, frame);
         };
     }
 }
 
+#[derive(Clone)]
 pub struct VideoCachedFramesOfCertainResolution {
     width: u32,
     height: u32,
@@ -57,6 +72,20 @@ impl VideoCachedFramesOfCertainResolution {
     }
     pub fn new(width: u32, height: u32) -> Self {
         Self { width, height, cached_frames: Arc::new(Mutex::new(VideoCachedFramesOfCertainResolutionData::new(width, height))), }
+    }
+    
+    pub fn clear(&self) {
+        Self::clear_from_arc(&self.cached_frames);
+    }
+    fn clear_from_arc(arc: &Arc<Mutex<VideoCachedFramesOfCertainResolutionData>>) {
+        arc.lock().unwrap().cached_frames.clear();
+    }
+    /// Spawns a background thread that will clear the cache as soon as the mutex locks. Use this to avoid freezing front-end parts of the program.
+    pub fn clear_whenever_possible(&self) -> JoinHandle<()> {
+        let arc = self.cached_frames.clone();
+        thread::spawn(move || {
+            Self::clear_from_arc(&arc);
+        })
     }
 
     pub fn width(&self) -> u32 { self.width }

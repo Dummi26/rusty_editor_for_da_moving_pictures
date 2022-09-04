@@ -1,16 +1,50 @@
 use std::{path::PathBuf, io::{self, Read}};
 
-use image::{DynamicImage, imageops::FilterType, GenericImageView, GenericImage};
+use image::{DynamicImage, imageops::FilterType};
+
+use super::content::{Content};
 
 pub struct Image {
     pub path: PathBuf,
     pub img_original: Option<DynamicImage>,
     pub img_scaled: Option<(FilterType, DynamicImage)>,
+    generic_content_data: crate::content::content::GenericContentData,
+    pub as_content_changes: ImageChanges,
+}
+#[derive(Default)]
+pub struct ImageChanges {
+    pub path: Option<(PathBuf, PathBuf)>,
+}
+impl Content for Image {
+    fn clone_no_caching(&self) -> Self {
+        Self::new(self.path.clone())
+    }
+    
+    fn children(&self) -> Vec<&Self> {
+        Vec::new()
+    }
+    fn children_mut(&mut self) -> Vec<&mut Self> {
+        Vec::new()
+    }
+
+    fn has_changes(&self) -> bool {
+        self.as_content_changes.path.is_some()
+    }
+    fn apply_changes(&mut self) -> bool {
+        if let Some(path) = self.as_content_changes.path.take() {
+            self.path = path.1;
+            true
+        } else { false }
+    }
+    
+    fn generic_content_data(&mut self) -> &mut super::content::GenericContentData { &mut self.generic_content_data }
 }
 impl Image {
     pub fn new(path: PathBuf) -> Self {
-        Self { path, img_original: None, img_scaled: None, }
+        Self { path, img_original: None, img_scaled: None, as_content_changes: ImageChanges::default(), generic_content_data: crate::content::content::GenericContentData::default(), }
     }
+}
+impl Image {
     pub fn load_img_force(&mut self) {
         self.img_original = match std::fs::File::open(&self.path) {
             Ok(mut file) => {

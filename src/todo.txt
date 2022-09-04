@@ -1,0 +1,10 @@
+!?  - Priority | Needs thought | Effort (0-9+X)
+  8 - Add effect that makes pixels transparent based on their color (greenscreen/key)
+! 4 - Sort files in ./src/ (especially video caching, rendering, and data structs)
+! 5 - Use Speedy2D for GPU accelerated drawing/rendering and UI
+ ?4 - Make effect parsing more modular (and not hardcoded in the parser)
+ ?7 - Add Bezier to Curve
+!?3 - How do we handle t=1.0? It shouldn't exist but then what is the "last" frame? Depends on export framerate? Is that fine or is that so bad that it needs a fix or an extra condition (i.e. length is exclusive UNLESS it reaches all the way to 1.0 or something)
+ ?1 - If it's better (is it?), move transparency_adjustments out of video and into an effect.
+ ?0 - Is it useful to make the timing in Curve::Chain a Curve of itself (rather than a static f64), or does that cause more confusion than anything? Might change to using curves there when I have a decent gui.
+! 5 - For content::image::Image, when loading any image from disk, first check if it is already present and loaded to avoid unnecessary disk strain.

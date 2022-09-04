@@ -1,19 +1,21 @@
 use std::path::PathBuf;
 
+use crate::cli::Clz;
+use crate::video::VideoTypeEnum;
 use eframe::egui;
 
 use crate::project::Project;
 use crate::video_cached_frames::{VideoCachedFramesOfCertainResolution};
 use crate::multithreading::automatically_cache_frames::VideoWithAutoCache;
 
-pub fn main() {
-    let mut path = "[UNSPECIFIED! Use --path=[path] to set a project path.]".to_string();
-    let options = eframe::NativeOptions::default();
-    for arg in std::env::args() {
-        if arg.starts_with("--path=") {
-            path = arg[7..].to_string();
-        };
+pub fn main(args: crate::cli::CustomArgs) -> ! {
+    let path = match args.project_path {
+        Some(v) => v,
+        None => panic!("\n{}\n",
+            Clz::error_info("Could not launch gui because no project was specified. Please use --proj-path to point to a project file you would like to open."),
+        ),
     };
+    let options = eframe::NativeOptions::default();
     eframe::run_native(
         "Rusty editor",
         options,
@@ -36,12 +38,11 @@ struct MainWindow {
 impl MainWindow {
     fn new(project_file: PathBuf) -> Self {
         let video = VideoWithAutoCache::new(
-            crate::video::Video::new_full(crate::video::VideoType::List(Vec::new())),
-            0, 0);
+            crate::video::Video::new_full(crate::video::VideoType::new(VideoTypeEnum::List(Vec::new()))));
         Self {
             video_cache: Self::get_video_cache(&video),
             project: {
-                let mut proj = match crate::files::file_handler::read_from_file(project_file) {
+                let mut proj = match crate::files::file_handler::read_from_file(&project_file) {
                     Ok(Ok(v)) => v,
                     Ok(Err(err)) => panic!("[ParseFile @ egui::MainWindow::new(..)] Error parsing file: {}", err.to_string()),
                     Err(err) => panic!("[ParseFile @ egui::MainWindow::new(..)] IO Error: {}", err),
@@ -61,7 +62,7 @@ impl MainWindow {
 impl MainWindow {
     fn get_video_cache(video: &VideoWithAutoCache) -> VideoCachedFramesOfCertainResolution {
         let (width, height) = video.get_width_and_height_mutex();
-        VideoCachedFramesOfCertainResolution::new_frames(width, height, video.get_vid_mutex_arc().lock().unwrap().last_draw.with_resolution_or_create(width, height))
+        video.get_vid_mutex_arc().lock().unwrap().last_draw.with_resolution_or_create(width, height)
     }
 }
 
@@ -69,7 +70,7 @@ impl eframe::App for MainWindow {
     fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.add(egui::Slider::new(&mut self.video_progress_fast, 0.0..=1.0));
-            ui.add(egui::Slider::new(&mut self.video_progress_exact, 0.0..=1.0));
+            //ui.add(egui::Slider::new(&mut self.video_progress_exact, 0.0..=1.0));
             /**/ {
                 let (w, h) = (ui.available_width().floor() as u32, ui.available_height().floor() as u32);
                 if w != self.video_cache.width() || h != self.video_cache.height() {

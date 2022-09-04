@@ -1,4 +1,3 @@
-#[derive(Clone)]
 pub enum Curve {
     /// Always has the same value.
     Constant(f64),
@@ -9,12 +8,27 @@ pub enum Curve {
     /// Chains multiple Curves together. Obviously, the curve's values should be the same at the points where they meet, but this is not strictly necessary. The f64 values in the tuple are the length for the corresponding curve. If their sum is less than 1, the end will use the value the final curve returned for 1.
     Chain(Vec<(Curve, f64)>),
 }
-#[derive(Clone)]
+impl Clone for Curve { fn clone(&self) -> Self { match self {
+    Curve::Constant(a) => Curve::Constant(a.clone()),
+    Curve::Linear(a, b) => Curve::Linear(a.clone(), b.clone()),
+    Curve::SmoothFlat(a, b) => Curve::SmoothFlat(a.r().clone().b(), b.r().clone().b()),
+    Curve::Chain(a) => Curve::Chain({
+        let mut nvec = Vec::with_capacity(a.len());
+        for b in a {
+            nvec.push((b.0.clone(), b.1.clone()));
+        };
+        nvec
+    }),
+} } }
+
 pub struct BCurve {
     pub c: Box<Curve>,
 } impl BCurve {
     pub fn n(c: Curve) -> Self { Self { c: Box::new(c), } }
     pub fn c(self) -> Curve { *self.c }
+    pub fn r(&self) -> &Curve { self.c.as_ref() }
+} impl Clone for BCurve {
+    fn clone(&self) -> Self { self.c.clone().b() }
 }
 impl Curve {
     pub fn b(self) -> BCurve { BCurve::n(self) }

@@ -1,4 +1,4 @@
-use std::{num::{ParseFloatError, ParseIntError}, error::Error, path::PathBuf, io, fmt::{Display, Write}};
+use std::{num::{ParseFloatError, ParseIntError}, path::PathBuf, io, fmt::Display};
 
 pub enum ParserError {
     /// File ended unexpectedly.
@@ -34,9 +34,9 @@ pub enum ParserError {
     EffectParseError{ effect_identifier: String, custom_error: String, },
 
     /// Failed to parse string into an int.
-    ParseIntError(ParseIntError),
+    ParseIntError(String, ParseIntError),
     /// Failed to parse string into a float.
-    ParseFloatError(ParseFloatError),
+    ParseFloatError(String, ParseFloatError),
 }
 impl Display for ParserError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -53,8 +53,8 @@ impl Display for ParserError {
             Self::InvalidCurveIdentifier(c) => format!("Found unexpected character '{c}' when parsing Curve. Allowed are only 0-9, '.', '/', 's', and '#'."),
             Self::UnknownEffect(e) => format!("Effect '{e}' does not exist! Try None (placeholder), BlackWhite, Shake, ChangeSpeed, Blur, ColorAdjust or ColorKey."),
             Self::EffectParseError { effect_identifier, custom_error } => format!("Failed to parse effect '{effect_identifier}', Err: \"{custom_error}\""),
-            Self::ParseIntError(e) => format!("Failed to parse int. Err: {e}"),
-            Self::ParseFloatError(e) => format!("Failed to parse float. Err: {e}"),
+            Self::ParseIntError(i, e) => format!("Failed to parse '{i}' into an int. Err: {e}"),
+            Self::ParseFloatError(i, e) => format!("Failed to parse '{i}' into a float. Err: {e}"),
         }.as_str())
     }
 }

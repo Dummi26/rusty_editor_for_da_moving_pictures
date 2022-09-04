@@ -5,7 +5,7 @@ use crate::{project::Project};
 const VERSION_CURRENT_MAJOR: u32 = 0;
 const VERSION_CURRENT_MINOR: u32 = 0;
 
-pub fn read_from_file(file_name: PathBuf) -> io::Result<Result<Project, CreateVideoFromFileError>> {
+pub fn read_from_file(file_name: &PathBuf) -> io::Result<Result<Project, CreateVideoFromFileError>> {
     let file_contents = std::fs::read_to_string(&file_name)?;
     let mut file_content_lines = file_contents.lines();
     if let Some(first_line) = file_content_lines.next() {

@@ -1,6 +1,6 @@
-use std::{fs::{self, File}, io::{self, Read, Cursor}, path::PathBuf};
+use std::{fs::{self}, io::{self}, path::PathBuf, rc::Rc, sync::{RwLock, Arc}};
 
-use image::{io::Reader as ImageReader, DynamicImage};
+use super::content::{Content};
 
 pub struct InputVideo {
     images_directory: PathBuf,
@@ -8,6 +8,36 @@ pub struct InputVideo {
     /// FrameData: raw image data for all given frames.
     /// Option<i8>: For every frame, if this is 0, the frame is available and ready to be used. If it is positive, the nearest available frame is n entries further down the vec. If it is negative, the same thing applies, but in the opposite direction. If it is none, there is no value close enough.
     frames_image_data: Vec<(Option<i8>, crate::content::image::Image)>,
+    generic_content_data: crate::content::content::GenericContentData,
+    pub as_content_changes: InputVideoChanges,
+}
+#[derive(Default)]
+pub struct InputVideoChanges {
+    pub images_directory: Option<(PathBuf, PathBuf)>,
+}
+impl Content for InputVideo {
+    fn clone_no_caching(&self) -> Self {
+        Self { images_directory: self.images_directory.clone(), frames_image_data: Vec::new(), as_content_changes: InputVideoChanges::default(), generic_content_data: crate::content::content::GenericContentData::default(), }
+    }
+    
+    fn children(&self) -> Vec<&Self> {
+        Vec::new()
+    }
+    fn children_mut(&mut self) -> Vec<&mut Self> {
+        Vec::new()
+    }
+
+    fn has_changes(&self) -> bool {
+        self.as_content_changes.images_directory.is_some()
+    }
+    fn apply_changes(&mut self) -> bool {
+        if let Some(images_directory) = self.as_content_changes.images_directory.take() {
+            self.images_directory = images_directory.1;
+            true
+        } else { false }
+    }
+    
+    fn generic_content_data(&mut self) -> &mut super::content::GenericContentData { &mut self.generic_content_data }
 }
 impl InputVideo {
     /// You can use "ffmpeg -i vids/video.mp4 path/%09d.png" or something similar to generate such a directory. Make sure the path ends in the path separator (likely \ on windows and / on unix)!
@@ -27,12 +57,16 @@ impl InputVideo {
         Ok(Self {
             images_directory: images_directory,
             frames_image_data,
+            as_content_changes: InputVideoChanges::default(),
+            generic_content_data: crate::content::content::GenericContentData::default(),
         })
     }
-
+}
+impl InputVideo {
     pub fn get_length(&self) -> usize {
         self.frames_image_data.len()
     }
+    pub fn get_dir(&self) -> &PathBuf { &self.images_directory }
     /// Equivalent to get_frame_fast with max_frames_distance = 0.
     pub fn get_frame<'a>(&'a mut self, progress: f64) -> &'a mut crate::content::image::Image {
         self.get_frame_fast(progress, 0)

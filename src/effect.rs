@@ -2,16 +2,24 @@ use image::{DynamicImage};
 
 use crate::{video::Video, video_render_settings::VideoRenderSettings};
 
+use effects::EffectT;
+
 pub struct Effect {
     /// The actual effect
-    pub effect: Box<dyn effects::Effect>,
+    pub effect: effects::EffectsEnum,
 }
 impl Effect {
-    pub fn new<T>(effect: T) -> Self where T: effects::Effect + 'static {
-        Self { effect: Box::new(effect), }
+    pub fn new<T>(effect: T) -> Self where T: effects::EffectT + 'static {
+        Self::new_from_enum(effect.as_enum())
+    }
+    pub fn new_from_enum(effect: effects::EffectsEnum) -> Self {
+        Self { effect, }
     }
     pub fn process_image(&mut self, progress: f64, vid: &mut Video, img: &mut DynamicImage, render_settings: &VideoRenderSettings) {
         self.effect.process_image(progress, vid, img, render_settings);
+    }
+    pub fn clone_no_caching(&self) -> Self {
+        self.effect.clone_no_caching()
     }
 }
 
@@ -22,27 +30,78 @@ pub mod effects {
 
     use crate::{video_render_settings::VideoRenderSettings, curve::Curve};
 
-    pub trait Effect: Send {
+    pub trait EffectT: Send {
         /// The default implementation of this should just call prepare_draw and draw on vid.
         fn process_image(&mut self, progress: f64, vid: &mut crate::video::Video, img: &mut super::DynamicImage, render_settings: &VideoRenderSettings);
+        /// 
+        fn clone_no_caching(&self) -> super::Effect;
+        
+        fn as_enum(self) -> EffectsEnum;
+    }
+    pub enum EffectsEnum {
+        Nothing(Nothing),
+        BlackWhite(BlackWhite),
+        Shake(Shake),
+        ChangeSpeed(ChangeSpeed),
+        ColorAdjust(ColorAdjust),
+        Blur(Blur),
+        ColorKey(ColorKey),
+    }
+    impl EffectT for EffectsEnum {
+        fn process_image(&mut self, progress: f64, vid: &mut crate::video::Video, img: &mut super::DynamicImage, render_settings: &VideoRenderSettings) {
+            match self {
+                EffectsEnum::Nothing(v) => v.process_image(progress, vid, img, render_settings),
+                EffectsEnum::BlackWhite(v) => v.process_image(progress, vid, img, render_settings),
+                EffectsEnum::Shake(v) => v.process_image(progress, vid, img, render_settings),
+                EffectsEnum::ChangeSpeed(v) => v.process_image(progress, vid, img, render_settings),
+                EffectsEnum::ColorAdjust(v) => v.process_image(progress, vid, img, render_settings),
+                EffectsEnum::Blur(v) => v.process_image(progress, vid, img, render_settings),
+                EffectsEnum::ColorKey(v) => v.process_image(progress, vid, img, render_settings),
+            }
+        }
+
+        fn clone_no_caching(&self) -> super::Effect {
+            match self {
+                EffectsEnum::Nothing(v) => v.clone_no_caching(),
+                EffectsEnum::BlackWhite(v) => v.clone_no_caching(),
+                EffectsEnum::Shake(v) => v.clone_no_caching(),
+                EffectsEnum::ChangeSpeed(v) => v.clone_no_caching(),
+                EffectsEnum::ColorAdjust(v) => v.clone_no_caching(),
+                EffectsEnum::Blur(v) => v.clone_no_caching(),
+                EffectsEnum::ColorKey(v) => v.clone_no_caching(),
+            }
+        }
+        
+        fn as_enum(self) -> EffectsEnum {
+            self
+        }
     }
 
 
 
-    pub struct Nothing {}
-    impl Effect for Nothing {
+    pub struct Nothing {
+    }
+    impl Nothing { pub fn new() -> Self {
+        Self {  }
+    } }
+    impl EffectT for Nothing {
         fn process_image(&mut self, progress: f64, vid: &mut crate::video::Video, img: &mut image::DynamicImage, render_settings: &VideoRenderSettings) {
             if let Some(prep_data) = vid.prep_draw(progress) {
                 vid.draw(img, prep_data, render_settings);
             };
         }
+        fn clone_no_caching(&self) -> super::Effect { super::Effect::new(Self::new()) }
+        fn as_enum(self) -> EffectsEnum { EffectsEnum::Nothing(self) }
     }
 
 
 
     pub struct BlackWhite {
     }
-    impl Effect for BlackWhite {
+    impl BlackWhite { pub fn new() -> Self {
+        Self {  }
+    } }
+    impl EffectT for BlackWhite {
         fn process_image(&mut self, progress: f64, vid: &mut crate::video::Video, img: &mut image::DynamicImage, render_settings: &VideoRenderSettings) {
             if let Some(prep_draw) = vid.prep_draw(progress) {
                 vid.draw(img, prep_draw, render_settings);
@@ -56,6 +115,8 @@ pub mod effects {
                 px[2] = rgb;
             };
         }
+        fn clone_no_caching(&self) -> super::Effect { super::Effect::new(Self::new()) }
+        fn as_enum(self) -> EffectsEnum { EffectsEnum::BlackWhite(self) }
     }
 
 
@@ -66,7 +127,10 @@ pub mod effects {
         pub shakes_count_x: f64,
         pub shakes_count_y: f64,
     }
-    impl Effect for Shake {
+    impl Shake { pub fn new(shake_dist_x: f64, shake_dist_y: f64, shakes_count_x: f64, shakes_count_y: f64) -> Self {
+        Self { shake_dist_x, shake_dist_y, shakes_count_x, shakes_count_y, }
+    } }
+    impl EffectT for Shake {
         fn process_image(&mut self, progress: f64, vid: &mut crate::video::Video, img: &mut super::DynamicImage, render_settings: &VideoRenderSettings) {
             if let Some(mut prep_data) = vid.prep_draw(progress) {
     
@@ -80,6 +144,8 @@ pub mod effects {
                 vid.draw(img, prep_data, render_settings);
             };
         }
+        fn clone_no_caching(&self) -> super::Effect { super::Effect::new(Self::new(self.shake_dist_x.clone(), self.shake_dist_y.clone(), self.shakes_count_x.clone(), self.shakes_count_y.clone())) }
+        fn as_enum(self) -> EffectsEnum { EffectsEnum::Shake(self) }
     }
 
 
@@ -87,13 +153,18 @@ pub mod effects {
     pub struct ChangeSpeed {
         pub time: Curve,
     }
-    impl Effect for ChangeSpeed {
+    impl ChangeSpeed { pub fn new(time: Curve) -> Self {
+        Self { time, }
+    } }
+    impl EffectT for ChangeSpeed {
         fn process_image(&mut self, progress: f64, vid: &mut crate::video::Video, img: &mut image::DynamicImage, render_settings: &VideoRenderSettings) {
             if let Some(mut prep_data) = vid.prep_draw(progress) {
                 prep_data.progress = self.time.get_value(prep_data.progress);
                 vid.draw(img, prep_data, render_settings);
             };
         }
+        fn clone_no_caching(&self) -> super::Effect { super::Effect::new(Self::new(self.time.clone())) }
+        fn as_enum(self) -> EffectsEnum { EffectsEnum::ChangeSpeed(self) }
     }
 
 
@@ -101,7 +172,10 @@ pub mod effects {
     pub struct ColorAdjust {
         pub mode: ColorAdjust_Mode,
     }
-    impl Effect for ColorAdjust {
+    impl ColorAdjust { pub fn new(mode: ColorAdjust_Mode) -> Self {
+        Self { mode, }
+    } }
+    impl EffectT for ColorAdjust {
         fn process_image(&mut self, progress: f64, vid: &mut crate::video::Video, img: &mut super::DynamicImage, render_settings: &VideoRenderSettings) {
             if let Some(prep_draw) = vid.prep_draw(progress) {
                 vid.draw(img, prep_draw, render_settings);
@@ -111,8 +185,11 @@ pub mod effects {
                 px.0 = self.mode.get_color(px.0);
             };
         }
+        fn clone_no_caching(&self) -> super::Effect { super::Effect::new(Self::new(self.mode.clone())) }
+        fn as_enum(self) -> EffectsEnum { EffectsEnum::ColorAdjust(self) }
     }
     #[allow(non_camel_case_types)]
+    #[derive(Clone)]
     pub enum ColorAdjust_Mode {
         Rgba(Curve, Curve, Curve, Curve),
     }
@@ -136,11 +213,16 @@ pub mod effects {
     pub struct Blur {
         pub mode: Blur_Mode,
     }
+    impl Blur { pub fn new(mode: Blur_Mode) -> Self {
+        Self { mode, }
+    } }
+    #[allow(non_camel_case_types)]
+    #[derive(Clone)]
     pub enum Blur_Mode {
         Square { radius: Curve, },
         Downscale { width: Curve, height: Curve, },
     }
-    impl Effect for Blur {
+    impl EffectT for Blur {
         fn process_image(&mut self, progress: f64, vid: &mut crate::video::Video, img: &mut super::DynamicImage, render_settings: &VideoRenderSettings) {
             if let Some(prep_data) = vid.prep_draw(progress) {
                 let mut img2 = super::DynamicImage::new_rgba8(img.width(), img.height());
@@ -185,6 +267,8 @@ pub mod effects {
                 };
             };
         }
+        fn clone_no_caching(&self) -> super::Effect { super::Effect::new(Self::new(self.mode.clone())) }
+        fn as_enum(self) -> EffectsEnum { EffectsEnum::Blur(self) }
     }
 
 
@@ -192,7 +276,10 @@ pub mod effects {
     pub struct ColorKey {
         pub mode: ColorKey_Mode,
     }
-    impl Effect for ColorKey {
+    impl ColorKey { pub fn new(mode: ColorKey_Mode) -> Self {
+        Self { mode, }
+    } }
+    impl EffectT for ColorKey {
         fn process_image(&mut self, progress: f64, vid: &mut crate::video::Video, img: &mut super::DynamicImage, render_settings: &VideoRenderSettings) {
             if let Some(prep_draw) = vid.prep_draw(progress) {
                 vid.draw(img, prep_draw, render_settings);
@@ -202,8 +289,11 @@ pub mod effects {
                 px.0 = self.mode.get_color(px.0);
             };
         }
+        fn clone_no_caching(&self) -> super::Effect { super::Effect::new(Self::new(self.mode.clone())) }
+        fn as_enum(self) -> EffectsEnum { EffectsEnum::ColorKey(self) }
     }
     #[allow(non_camel_case_types)]
+    #[derive(Clone)]
     pub enum ColorKey_Mode {
         TransparentIfMatches((u8, u8, u8)),
         TransparentIfRange(((u8, u8), (u8, u8), (u8, u8))),

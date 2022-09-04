@@ -1,7 +1,6 @@
 mod egui;
+mod speedy2d;
 
-pub const IS_ENABLED: bool = true;
-
-pub fn main() {
-    egui::main();
+pub fn main(args: crate::cli::CustomArgs) -> crate::cli::CustomArgs {
+    speedy2d::main(args)
 }

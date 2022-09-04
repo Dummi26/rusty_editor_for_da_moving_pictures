@@ -1,6 +1,8 @@
+use std::{rc::Rc, sync::RwLock, slice::{IterMut, Iter}};
+
 use image::{DynamicImage, GenericImageView, GenericImage, Pixel, Rgba};
 
-use crate::{curve::Curve, video_cached_frames::VideoCachedFrames, video_render_settings::VideoRenderSettings};
+use crate::{curve::Curve, video_cached_frames::VideoCachedFrames, video_render_settings::VideoRenderSettings, content::{content::Content, image::ImageChanges, input_video::InputVideoChanges}, cli::Clz};
 
 pub struct Video {
     // - - The video's data (what is to be saved to the project file) - -
@@ -19,6 +21,78 @@ pub struct Video {
 
     /// Caching for performance reasons (at the cost of memory usage)
     pub last_draw: VideoCachedFrames,
+    generic_content_data: crate::content::content::GenericContentData,
+    pub as_content_changes: VideoChanges,
+}
+#[derive(Default)]
+pub struct VideoChanges {
+    pub pos: Option<(Option<Curve>, Option<Curve>, Option<Curve>, Option<Curve>)>,
+    pub start: Option<(f64, f64)>,
+    pub length: Option<(f64, f64)>,
+    pub video: Option<VideoTypeChanges>,
+}
+impl Content for Video {
+    fn clone_no_caching(&self) -> Self {
+        Self::new(self.set_pos.clone(), self.set_start_frame.clone(), self.set_length.clone(), self.video.clone_no_caching())
+    }
+    
+    fn children(&self) -> Vec<&Self> {
+        match &self.video.vt {
+            VideoTypeEnum::List(vec) => vec.iter().collect(),
+            VideoTypeEnum::WithEffect(v, _) => vec![v.as_ref()],
+            VideoTypeEnum::Image(_) |
+            VideoTypeEnum::Raw(_) => Vec::new(),
+        }
+    }
+    fn children_mut(&mut self) -> Vec<&mut Self> {
+        match &mut self.video.vt {
+            VideoTypeEnum::List(vec) => vec.iter_mut().collect(),
+            VideoTypeEnum::WithEffect(v, _) => vec![v.as_mut()],
+            VideoTypeEnum::Image(_) |
+            VideoTypeEnum::Raw(_) => Vec::new(),
+        }
+    }
+    
+    fn has_changes(&self) -> bool {
+        self.as_content_changes.pos.is_some() | self.as_content_changes.start.is_some() | self.as_content_changes.length.is_some() | self.as_content_changes.video.is_some()
+    }
+    fn apply_changes(&mut self) -> bool {
+        let mut out = false;
+        let mut err = false;
+        if let Some(mut pos) = self.as_content_changes.pos.take() {
+            if let Some(x) = pos.0.take() {
+                self.set_pos.x = x;
+            };
+            if let Some(y) = pos.1.take() {
+                self.set_pos.y = y;
+            };
+            if let Some(w) = pos.2.take() {
+                self.set_pos.w = w;
+            };
+            if let Some(h) = pos.3.take() {
+                self.set_pos.h = h;
+            };
+            out = true;
+        };
+        if let Some(start) = self.as_content_changes.start.take() {
+            self.set_start_frame = start.1;
+            out = true;
+        };
+        if let Some(length) = self.as_content_changes.length.take() {
+            self.set_length = length.1;
+            out = true;
+        };
+        if let Some(video) = self.as_content_changes.video.take() {
+            self.video.apply_changes();
+            self.video.changes = Some(video);
+            if !self.video.apply_changes() { err = true; };
+        };
+        self.last_draw.clear_resolutions();
+        out && !err
+        
+    }
+    
+    fn generic_content_data(&mut self) -> &mut crate::content::content::GenericContentData { &mut self.generic_content_data }
 }
 impl Video {
     pub fn new_full(video: VideoType) -> Self {
@@ -30,6 +104,8 @@ impl Video {
             transparency_adjustments: TransparencyAdjustments::None,
             done_actual_progress: 0.0,
             last_draw: VideoCachedFrames::new(),
+            generic_content_data: crate::content::content::GenericContentData::default(),
+            as_content_changes: VideoChanges::default(),
         }
     }
     pub fn new_full_size(start_frame: f64, length: f64, video: VideoType) -> Self {
@@ -41,6 +117,8 @@ impl Video {
             transparency_adjustments: TransparencyAdjustments::None,
             done_actual_progress: 0.0,
             last_draw: VideoCachedFrames::new(),
+            generic_content_data: crate::content::content::GenericContentData::default(),
+            as_content_changes: VideoChanges::default(),
         }
     }
     pub fn new(pos: Pos<Curve, Curve>, start_frame: f64, length: f64, video: VideoType) -> Self {
@@ -52,6 +130,8 @@ impl Video {
             transparency_adjustments: TransparencyAdjustments::None,
             done_actual_progress: 0.0,
             last_draw: VideoCachedFrames::new(),
+            generic_content_data: crate::content::content::GenericContentData::default(),
+            as_content_changes: VideoChanges::default(),
         }
     }
 
@@ -96,7 +176,7 @@ impl Video {
             let cached_frames_of_correct_resolution = if render_settings.allow_retrieval_of_cached_frames != None { self.last_draw.with_resolution(pos.w, pos.h) } else { None };
             match cached_frames_of_correct_resolution {
                 Some(cache) => {
-                    match cache.lock().unwrap().get_frame(progress) {
+                    match cache.cache().lock().unwrap().get_frame(progress) {
                         Some((dist, frame)) => {
                             if dist <= render_settings.allow_retrieval_of_cached_frames.expect("This always exists because for cfocr to be Some, arocf cannot be none.") {
                                 self.done_actual_progress = frame.progress;
@@ -200,11 +280,11 @@ impl Video {
     /// crop: new min x and y (0 if not cropped), new right and bottom bounds (original width and height if not cropped or only cropped on left and/or top, otherwise width or height minus cropped pixels)
     fn draw3(&mut self, progress: f64, render_settings: &VideoRenderSettings, image: &mut DynamicImage) {
 
-        match &mut self.video {
+        match &mut self.video.vt {
 
 
 
-            VideoType::Raw(raw_img) => {
+            VideoTypeEnum::Raw(raw_img) => {
                 //println!("Drawing RAW");
                 let img = raw_img.get_frame_fast(progress, render_settings.max_distance_when_retrieving_closest_frame);
                 img.draw(image, render_settings.image_scaling_filter_type);
@@ -212,19 +292,19 @@ impl Video {
             
             
             
-            VideoType::Image(img) => {
+            VideoTypeEnum::Image(img) => {
                 img.draw(image, render_settings.image_scaling_filter_type);
             },
 
 
 
-            VideoType::WithEffect(vid, effect) => {
+            VideoTypeEnum::WithEffect(vid, effect) => {
                 effect.process_image(progress, vid, image, render_settings);
             },
 
 
 
-            VideoType::List(others) => {
+            VideoTypeEnum::List(others) => {
                 //println!("Drawing LIST");
                 for other in others {
                     if let Some(prep_draw) = other.prep_draw(progress) {
@@ -252,24 +332,116 @@ impl Video {
     }
 }
 
-pub enum VideoType {
+pub struct VideoType {
+    pub vt: VideoTypeEnum,
+    generic_content_data: crate::content::content::GenericContentData,
+    changes: Option<VideoTypeChanges>,
+} impl VideoType { pub fn new(vt: VideoTypeEnum) -> Self { Self { vt, changes: None, generic_content_data: crate::content::content::GenericContentData::default(), }
+} }
+pub enum VideoTypeEnum {
     List(Vec<Video>),
     WithEffect(Box<Video>, crate::effect::Effect),
     Image(crate::content::image::Image),
-    Raw(crate::input_video::InputVideo),
+    Raw(crate::content::input_video::InputVideo),
+}
+pub enum VideoTypeChanges {
+    List(Vec<VideoTypeChanges_List>),
+    WithEffect(Option<Box<VideoChanges>>, Option<crate::effect::Effect>),
+    Image(ImageChanges),
+    Raw(InputVideoChanges),
+    ChangeType(VideoTypeEnum),
 }
 
-pub struct Pos<T, U> where T: Sized, U: Sized {
+#[allow(non_camel_case_types)]
+pub enum VideoTypeChanges_List {
+    Swap(usize, usize),
+    Move(usize, usize),
+    Insert(usize, Video),
+    Change(usize, VideoChanges),
+    Replace(usize, Video),
+    Remove(usize),
+}
+
+impl Content for VideoType {
+    fn clone_no_caching(&self) -> Self {
+        VideoType::new(match &self.vt {
+            VideoTypeEnum::List(vec) => VideoTypeEnum::List({
+                let mut nvec = Vec::with_capacity(vec.len());
+                for v in vec {
+                    nvec.push(v.clone_no_caching());
+                };
+                nvec
+            }),
+            VideoTypeEnum::WithEffect(v, e) => VideoTypeEnum::WithEffect(Box::new(v.clone_no_caching()), e.clone_no_caching()),
+            VideoTypeEnum::Image(img) => VideoTypeEnum::Image(img.clone_no_caching()),
+            VideoTypeEnum::Raw(v) => VideoTypeEnum::Raw(v.clone_no_caching()),
+        })
+    }
+    
+    fn children(&self) -> Vec<&Self> {
+        Vec::new()
+    }
+    fn children_mut(&mut self) -> Vec<&mut Self> {
+        Vec::new()
+    }
+
+    fn has_changes(&self) -> bool {
+        self.changes.is_some()
+    }
+    fn apply_changes(&mut self) -> bool {
+        if let Some(changes) = self.changes.take() {
+            match (changes, &mut self.vt) {
+                (VideoTypeChanges::List(changes), VideoTypeEnum::List(vt)) => {
+                    for change in changes {
+                        match change {
+                            VideoTypeChanges_List::Swap(a, b) => { vt.swap(a, b); },
+                            VideoTypeChanges_List::Move(a, b) => { let v = vt.remove(b); vt.insert(a, v); }
+                            VideoTypeChanges_List::Insert(index, new_val) => { vt.insert(index, new_val); },
+                            VideoTypeChanges_List::Change(index, changes) => { let vid = vt.get_mut(index).unwrap(); vid.apply_changes(); vid.as_content_changes = changes; vid.apply_changes(); },
+                            VideoTypeChanges_List::Replace(index, new_val) => *vt.get_mut(index).unwrap() = new_val,
+                            VideoTypeChanges_List::Remove(index) => { vt.remove(index); },
+                        };
+                    };
+                    true
+                },
+                (VideoTypeChanges::ChangeType(new), _) => {
+                    self.vt = new;
+                    true
+                },
+                (changes, data) => panic!("\n{}\n    {}{}{}{}{}\n",
+                    Clz::error_info("Attempted to apply VideoTypeChanges, but found different types:"),
+                    Clz::error_details("Tried to apply changes of type "), Clz::error_cause(match changes {
+                        VideoTypeChanges::ChangeType(_) => "[?]",
+                        VideoTypeChanges::List(_) => "List",
+                        VideoTypeChanges::WithEffect(_, _) => "WithEffect",
+                        VideoTypeChanges::Image(_) => "Image",
+                        VideoTypeChanges::Raw(_) => "Video",
+                    }), Clz::error_details(" to data of type "), Clz::error_cause(match data {
+                        VideoTypeEnum::List(_) => "List",
+                        VideoTypeEnum::WithEffect(_, _) => "WithEffect",
+                        VideoTypeEnum::Image(_) => "Image",
+                        VideoTypeEnum::Raw(_) => "Video",
+                    }), Clz::error_details(".")
+                ),
+            }
+        } else { false }
+    }
+    
+    fn generic_content_data(&mut self) -> &mut crate::content::content::GenericContentData { &mut self.generic_content_data }
+}
+
+#[derive(Clone)]
+pub struct Pos<T, U> where T: Sized + Clone, U: Sized + Clone {
     pub x: T,
     pub y: T,
     pub w: U,
     pub h: U,
 }
-impl<T, U> Pos<T, U> {
-    pub fn convert<A, F>(&self, converter: &F) -> Pos<A, A> where F: Fn(&T) -> A + Fn(&U) -> A {
+impl<T, U> Pos<T, U> where T: Clone, U: Clone {
+    pub fn convert<A, F>(&self, converter: &F) -> Pos<A, A> where F: Fn(&T) -> A + Fn(&U) -> A, A: Clone {
         self.convert_sep(converter, converter)
     }
-    pub fn convert_sep<A, B, F, G>(&self, converter1: F, converter2: G) -> Pos<A, B> where F: Fn(&T) -> A, G: Fn(&U) -> B {
+    pub fn convert_sep<A, B, F, G>(&self, converter1: F, converter2: G) -> Pos<A, B> where F: Fn(&T) -> A, G: Fn(&U) -> B, A: Clone, B: Clone {
         Pos {
             x: converter1(&self.x),
             y: converter1(&self.y),

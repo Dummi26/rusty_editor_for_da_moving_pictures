@@ -3,26 +3,27 @@ use std::{thread::{self, JoinHandle}, time::{Duration, Instant}};
 use crate::video::Video;
 use std::sync::{Arc, Mutex};
 
+#[derive(Clone)]
 pub struct VideoWithAutoCache {
-    data: Arc<Mutex<VideoWithAutoCacheData>>,
-    thread: Option<JoinHandle<()>>,
+    pub data: Arc<Mutex<VideoWithAutoCacheData>>,
 }
 
 /// This is the information the background thread has access to.
 /// None of its fields should be operated on for more than a few milliseconds. Anything that takes longer should be behind an Arc<Mutex<..>> so that the main thread, when accessing this struct,
 /// does not have to wait.
-struct VideoWithAutoCacheData {
+pub struct VideoWithAutoCacheData {
     vid: Arc<Mutex<Video>>,
-    commands: Vec<BackgroundThreadCommand>,
+    pub commands: Vec<BackgroundThreadCommand>,
+    thread: Option<JoinHandle<()>>,
     width: u32,
     height: u32,
 }
-enum BackgroundThreadCommand {
+pub enum BackgroundThreadCommand {
     Stop,
 }
 impl VideoWithAutoCache {
-    pub fn new(vid: Video, width: u32, height: u32) -> Self {
-        Self { data: Arc::new(Mutex::new(VideoWithAutoCacheData { vid: Arc::new(Mutex::new(vid)), width, height, commands: Vec::new(), })), thread: None, }
+    pub fn new(vid: Video) -> Self {
+        Self { data: Arc::new(Mutex::new(VideoWithAutoCacheData { vid: Arc::new(Mutex::new(vid)), width: 0, height: 0, commands: Vec::new(), thread: None, })), }
     }
     
     pub fn set_width_and_height(&mut self, width: u32, height: u32) {
@@ -38,9 +39,10 @@ impl VideoWithAutoCache {
     }
     
     pub fn is_still_alive(&mut self) -> bool {
-        if let Some(thread) = &self.thread {
+        let mut data = self.data.lock().unwrap();
+        if let Some(thread) = &data.thread {
             if thread.is_finished() {
-                self.thread = None;
+                data.thread = None;
                 false
             } else {
                 true
@@ -50,15 +52,17 @@ impl VideoWithAutoCache {
         }
     }
     pub fn signal_to_stop(&mut self) -> bool {
-        if let Some(_) = &self.thread {
-            self.data.lock().unwrap().commands.push(BackgroundThreadCommand::Stop);
+        let mut data = self.data.lock().unwrap();
+        if let Some(_) = &data.thread {
+            data.commands.push(BackgroundThreadCommand::Stop);
             true
         } else {
             false
         }
     }
     pub fn wait_for_thread_to_stop(&mut self) -> bool {
-        if let Some(thread) = self.thread.take() {
+        let mut data = self.data.lock().unwrap();
+        if let Some(thread) = data.thread.take() {
             match thread.join() {
                 Ok(_) => true,
                 Err(_) => false,
@@ -75,8 +79,10 @@ impl VideoWithAutoCache {
     pub fn cache(&mut self) -> bool {
         if self.is_still_alive() { return false; };
         let video_data = self.data.clone();
-        self.thread = Some(thread::spawn(move || {
-            let sleep_duration = Duration::from_millis(250);
+        let mut data = self.data.lock().unwrap();
+        data.thread = Some(thread::spawn(move || {
+            eprintln!("[bg.c] Starting thread...");
+            let sleep_duration = Duration::from_millis(25);
             //
             let mut frames_count = 0u128;
             // 'outer indicates that breaking from this loop will immedeately end the thread.
@@ -102,25 +108,25 @@ impl VideoWithAutoCache {
                     let optimal_caching_index = {
                         let last_draw = {
                             let mut vid = vid_arc.lock().unwrap();
-                            vid.last_draw.with_resolution(width, height)
+                            vid.last_draw.with_resolution_or_create(width, height)
                         }; // lock on vid is dropped again
-                        if let Some(last_draw) = last_draw {
-                            let (index, dist) = last_draw.lock().unwrap().get_most_useful_index_for_caching(); // lock on last_draw is dropped again
-                            if dist > 0.01 { Some(index) } else { None }
-                        } else {
-                            None
-                        }
+                        let (index, dist) = last_draw.cache().lock().unwrap().get_most_useful_index_for_caching(); // lock on last_draw is dropped again
+                        if dist > 0.005 { Some(index) } else { None }
                     };
                     if let Some(optimal_caching_index) = optimal_caching_index {
                         let mut vid = vid_arc.lock().unwrap(); // lock the mutex of the actual video while - THIS IS NOT WHAT WE WANT TO DO
                         if let Some(prep_data) = vid.prep_draw(optimal_caching_index) {
-                            vid.draw(&mut image::DynamicImage::new_rgba8(width, height), prep_data, &crate::video_render_settings::VideoRenderSettings::caching_thread());
+                            vid.draw(&mut image::DynamicImage::ImageRgba8(image::DynamicImage::new_rgb8(width, height).into_rgba8()), prep_data, &crate::video_render_settings::VideoRenderSettings::caching_thread());
                             frames_count += 1;
                             eprintln!("[bg.c] Took {}ms to draw #{}. [{optimal_caching_index}]", start_time.elapsed().as_millis(), frames_count);
                         } else {
+                            //eprintln!("[bg.c] no prep_data.");
                         };
+                    } else {
+                        //eprintln!("[bg.c] no index");
                     };
                 };
+                //eprintln!("[bg.c] pausing (short)");
                 thread::sleep(sleep_duration);
             };
         }));

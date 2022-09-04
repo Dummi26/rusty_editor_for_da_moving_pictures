@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use crate::{video::Video, multithreading::automatically_cache_frames::VideoWithAutoCache};
+use crate::{multithreading::automatically_cache_frames::VideoWithAutoCache, video_render_settings::VideoRenderSettings};
 
 pub struct Project {
     pub proj: ProjectData,
@@ -8,5 +8,6 @@ pub struct Project {
 }
 pub struct ProjectData {
     pub name: String,
-    pub path: PathBuf,
+    pub path: Option<PathBuf>,
+    pub render_settings_export: Option<VideoRenderSettings>,
 }

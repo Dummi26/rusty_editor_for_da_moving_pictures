@@ -1,10 +1,10 @@
-use std::{str::{Chars, FromStr}, path::PathBuf, string::ParseError};
+use std::{str::{Chars, FromStr}, path::PathBuf};
 
-use crate::{video::{Video, Pos, VideoType, TransparencyAdjustments}, project::{Project, ProjectData}, curve::Curve, effect::{effects, Effect}, input_video::InputVideo, multithreading::automatically_cache_frames::VideoWithAutoCache};
+use crate::{video::{Video, Pos, VideoType, VideoTypeEnum, TransparencyAdjustments}, project::{Project, ProjectData}, curve::Curve, effect::{effects, Effect}, multithreading::automatically_cache_frames::VideoWithAutoCache, content::input_video::InputVideo};
 
 use super::parser_general::ParserError;
 
-pub fn parse(str: &str, path: PathBuf) -> Result<Project, ParserError> {
+pub fn parse(str: &str, path: &PathBuf) -> Result<Project, ParserError> {
     let mut chars = str.chars();
     
     let mut proj = None;
@@ -20,13 +20,13 @@ pub fn parse(str: &str, path: PathBuf) -> Result<Project, ParserError> {
         };
         match identifier.as_str() {
             "proj" => match proj { None => proj = Some(parse_proj(&mut chars, path.clone())?), Some(_) => return Err(ParserError::DoubleDefinitionOf(identifier)), },
-            "vid" => match vid { None => vid = Some(Video::new_full(VideoType::List(parse_vid_vids(&mut chars)?))), Some(_) => return Err(ParserError::DoubleDefinitionOf(identifier)), },
+            "vid" => match vid { None => vid = Some(Video::new_full(VideoType::new(VideoTypeEnum::List(parse_vid_vids(&mut chars)?)))), Some(_) => return Err(ParserError::DoubleDefinitionOf(identifier)), },
             _ => return Err(ParserError::InvalidIdentifier(identifier)),
         };
     };
     // return
     match (proj, vid) {
-        (Some(proj), Some(vid)) => Ok(Project { proj, vid: VideoWithAutoCache::new(vid, 0, 0), }),
+        (Some(proj), Some(vid)) => Ok(Project { proj, vid: VideoWithAutoCache::new(vid), }),
         (None, _) => Err(ParserError::MissingIdentifier(format!("proj"))),
         (_, None) => Err(ParserError::MissingIdentifier(format!("vid"))),
     }
@@ -35,7 +35,8 @@ pub fn parse(str: &str, path: PathBuf) -> Result<Project, ParserError> {
 fn parse_proj(chars: &mut Chars, path: PathBuf) -> Result<ProjectData, ParserError> {
     Ok(ProjectData {
         name: format!("doesn't_matter"),
-        path,
+        path: Some(path),
+        render_settings_export: Some(crate::video_render_settings::VideoRenderSettings::perfect_with_caching()), // TODO: This is a default value - project metadata should also be saved in the project file!
     })
 }
 
@@ -105,9 +106,9 @@ fn parse_vid_video(chars: &mut Chars) -> Result<VideoType, ParserError> {
             None => return Err(ParserError::UnexpectedEOF),
         };
     };
-    return Ok(match identifier.as_str() {
+    return Ok(VideoType::new(match identifier.as_str() {
         "List" => {
-            VideoType::List(parse_vid_vids(chars)?)
+            VideoTypeEnum::List(parse_vid_vids(chars)?)
         },
         "WithEffect" => {
             let video_data = parse_vid(chars)?;
@@ -121,7 +122,7 @@ fn parse_vid_video(chars: &mut Chars) -> Result<VideoType, ParserError> {
                     };
                 }
             };
-            VideoType::WithEffect(Box::new(video_data), match effect_name.as_str() {
+            VideoTypeEnum::WithEffect(Box::new(video_data), match effect_name.as_str() {
                 "None" => Effect::new(effects::Nothing {}),
                 "BlackWhite" => Effect::new(effects::BlackWhite {}),
                 "Shake" => Effect::new(effects::Shake {shake_dist_x: parse_vid_f64(chars)?, shake_dist_y: parse_vid_f64(chars)?, shakes_count_x: parse_vid_f64(chars)?, shakes_count_y: parse_vid_f64(chars)?, }),
@@ -190,7 +191,7 @@ fn parse_vid_video(chars: &mut Chars) -> Result<VideoType, ParserError> {
                     None => return Err(ParserError::UnexpectedEOF),
                 };
             };
-            VideoType::Image(crate::content::image::Image::new(path))
+            VideoTypeEnum::Image(crate::content::image::Image::new(path))
         }
         "VidFromImagesInDirectory" => {
             let mut directory = std::path::PathBuf::from("/");
@@ -209,7 +210,7 @@ fn parse_vid_video(chars: &mut Chars) -> Result<VideoType, ParserError> {
                     None => return Err(ParserError::UnexpectedEOF),
                 };
             };
-            VideoType::Raw(
+            VideoTypeEnum::Raw(
                 match InputVideo::new_from_directory_full_of_frames(directory.clone()) {
                     Ok(v) => v,
                     Err(err) => return Err(ParserError::DirectoryWithImagesNotFound(directory, err)),
@@ -217,7 +218,7 @@ fn parse_vid_video(chars: &mut Chars) -> Result<VideoType, ParserError> {
             )
         },
         _ => return Err(ParserError::InvalidVideoType(identifier)),
-    })
+    }))
 }
 
 fn parse_vid_curve(chars: &mut Chars) -> Result<Curve, ParserError> {
@@ -250,16 +251,18 @@ fn parse_vid_curve(chars: &mut Chars) -> Result<Curve, ParserError> {
 }
 
 fn parse_vid_int<T>(chars: &mut Chars) -> Result<T, ParserError> where T: FromStr<Err = std::num::ParseIntError> {
-    match parse_vid_to_next_semicolon_errors(String::new(), chars)?.parse() {
+    let str = parse_vid_to_next_semicolon_errors(String::new(), chars)?;
+    match str.parse() {
         Ok(v) => Ok(v),
-        Err(err) => Err(ParserError::ParseIntError(err)),
+        Err(err) => Err(ParserError::ParseIntError(str, err)),
     }
 }
 
 fn parse_vid_f64_prepend(prepend: String, chars: &mut Chars) -> Result<f64, ParserError> {
-    match parse_vid_to_next_semicolon_errors(prepend, chars)?.parse() {
+    let str = parse_vid_to_next_semicolon_errors(prepend, chars)?;
+    match str.parse() {
         Ok(v) => Ok(v),
-        Err(err) => Err(ParserError::ParseFloatError(err)),
+        Err(err) => Err(ParserError::ParseFloatError(str, err)),
     }
 }
 fn parse_vid_f64(chars: &mut Chars) -> Result<f64, ParserError> {
@@ -269,7 +272,6 @@ fn parse_vid_f64(chars: &mut Chars) -> Result<f64, ParserError> {
 /// Same as the one without _errors, but (Ok(s), _) becomes Ok(s) while (Err(s), _) becomes Err(ParserError::UnexpectedEOF)
 fn parse_vid_to_next_semicolon_errors(prepend: String, chars: &mut Chars) -> Result<String, ParserError> {
     if let Ok(text) = parse_vid_to_next_semicolon(prepend, chars).0 {
-        println!("Text: {}", &text);
         Ok(text)
     } else {
         Err(ParserError::UnexpectedEOF)
