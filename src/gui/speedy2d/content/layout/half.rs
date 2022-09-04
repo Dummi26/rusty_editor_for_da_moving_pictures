@@ -111,14 +111,14 @@ impl EditorWindowLayoutContentTrait for Half {
                                         let top_bar_info = self.get_top_bar_infos(draw_opts);
                                         let mouse_split_val = input.clonable.mouse_pos.1;
                                         let mouse_split_diff = mouse_split_val - self.get_split_with_top_bars(top_bar_info);
-                                        if mouse_split_diff.abs() < 0.01 {
+                                        if mouse_split_diff.abs() < 0.02 {
                                             self.set_split_with_top_bars(mouse_split_val, top_bar_info);
                                             self.mouse_dragging_split_bar = true;
                                         };
                                     } else {
                                         let mouse_split_val = input.clonable.mouse_pos.0;
                                         let mouse_split_diff = mouse_split_val - self.split;
-                                        if mouse_split_diff.abs() < 0.01 {
+                                        if mouse_split_diff.abs() < 0.02 {
                                             self.set_split(mouse_split_val);
                                             self.mouse_dragging_split_bar = true;
                                         };

@@ -12,18 +12,17 @@ pub trait Content: Sized {
     fn generic_content_data(&mut self) -> &mut GenericContentData;
 }
 
-pub struct ContentChangesGui {
-    pub temp: String,
-}
-
 #[derive(Default)]
 pub struct GenericContentData {
     pub highlighted: GenericContentHighlighted,
 }
 
-#[derive(Default)]
 pub enum GenericContentHighlighted {
-    #[default]
     No,
     Selected,
+}
+impl Default for GenericContentHighlighted {
+    fn default() -> Self {
+        Self::No
+    }
 }

@@ -1,6 +1,6 @@
 use speedy2d::{window::VirtualKeyCode, dimen::Vector2, color::Color, font::{TextOptions, TextLayout}};
 
-use crate::gui::speedy2d::{layout::{EditorWindowLayoutContentTrait, EditorWindowLayoutContentData}, content_list::EditorWindowLayoutContentEnum};
+use crate::{gui::speedy2d::{layout::{EditorWindowLayoutContentTrait, EditorWindowLayoutContentData}, content_list::EditorWindowLayoutContentEnum}, useful};
 
 pub struct QVidRunner {
     pub query: String,
@@ -30,10 +30,12 @@ impl EditorWindowLayoutContentTrait for QVidRunner {
                 crate::gui::speedy2d::layout::KeyboardAction::Released(_, _) => (),
                 crate::gui::speedy2d::layout::KeyboardAction::Typed(ch) => {
                     if !(input.owned.keyboard_modifiers_state.logo() || input.owned.keyboard_modifiers_state.ctrl() || input.owned.keyboard_modifiers_state.alt()) {
-                        match ch {
-                            '\n' | '\r' | '\t' => (),
-                            '_' => self.query = { let mut vec = Vec::from_iter(self.query.chars()); vec.pop(); String::from_iter(vec.into_iter()) },
-                            _ => self.query.push(ch.clone()),
+                        match useful::CharOrAction::from(ch) {
+                            useful::CharOrAction::Char(ch) => self.query.push(ch.clone()),
+                            useful::CharOrAction::Enter => self.query.clear(),
+                            useful::CharOrAction::Delete |
+                            useful::CharOrAction::Backspace => self.query = { let mut vec = Vec::from_iter(self.query.chars()); vec.pop(); String::from_iter(vec.into_iter()) },
+                            useful::CharOrAction::Ignored => (),
                         };
                     };
                 },

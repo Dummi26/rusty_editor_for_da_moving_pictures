@@ -8,7 +8,7 @@ impl AssetsManager {
             self.assets_path = Some(find_path());
         };
         fn find_path() -> PathBuf {
-            "/home/mark/Documents/code/rust/rusty_editor_for_da_moving_pictures/assets/".into()
+            "/run/media/mark/Samsung_T5/Code/Rust/Video Editor/rusty_editor_for_da_moving_pictures/assets/".into()
         }
         self.assets_path.clone().unwrap()
     }

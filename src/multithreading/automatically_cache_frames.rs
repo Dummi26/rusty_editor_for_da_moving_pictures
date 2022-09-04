@@ -118,7 +118,7 @@ impl VideoWithAutoCache {
                         if let Some(prep_data) = vid.prep_draw(optimal_caching_index) {
                             vid.draw(&mut image::DynamicImage::ImageRgba8(image::DynamicImage::new_rgb8(width, height).into_rgba8()), prep_data, &crate::video_render_settings::VideoRenderSettings::caching_thread());
                             frames_count += 1;
-                            eprintln!("[bg.c] Took {}ms to draw #{}. [{optimal_caching_index}]", start_time.elapsed().as_millis(), frames_count);
+                            //eprintln!("[bg.c] Took {}ms to draw #{}. [{optimal_caching_index}]", start_time.elapsed().as_millis(), frames_count);
                         } else {
                             //eprintln!("[bg.c] no prep_data.");
                         };

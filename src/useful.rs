@@ -11,6 +11,25 @@ impl<'a, T> MightBeRef<'a, T> {
     }
 }
 
+impl From<&char> for CharOrAction {
+    fn from(ch: &char) -> Self {
+        match ch {
+            '\n' => Self::Enter,
+            '\x08' => Self::Backspace,
+            '\x7F' => Self::Delete,
+            '\r' => Self::Ignored,
+            ch => Self::Char(ch.clone()),
+        }
+    }
+}
+pub enum CharOrAction {
+    Char(char),
+    Enter,
+    Backspace,
+    Delete,
+    Ignored,
+}
+
 pub fn get_elem_from_index_recursive<'a>(vid: &'a crate::video::Video, index: &mut u32) -> Option<&'a crate::video::Video> {
     if *index == 0 {
         Some(vid)
