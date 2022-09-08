@@ -35,6 +35,7 @@ impl EditorWindowLayoutContentTrait for QVidRunner {
                             useful::CharOrAction::Enter => self.query.clear(),
                             useful::CharOrAction::Delete |
                             useful::CharOrAction::Backspace => self.query = { let mut vec = Vec::from_iter(self.query.chars()); vec.pop(); String::from_iter(vec.into_iter()) },
+                            useful::CharOrAction::Tab => (),
                             useful::CharOrAction::Ignored => (),
                         };
                     };

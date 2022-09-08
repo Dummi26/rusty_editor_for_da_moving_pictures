@@ -40,6 +40,9 @@ impl Content for InputVideo {
     fn generic_content_data(&mut self) -> &mut super::content::GenericContentData { &mut self.generic_content_data }
 }
 impl InputVideo {
+    pub fn new() -> Self {
+        Self { images_directory: PathBuf::new(), frames_image_data: Vec::new(), generic_content_data: super::content::GenericContentData::default(), as_content_changes: InputVideoChanges::default(), }
+    }
     /// You can use "ffmpeg -i vids/video.mp4 path/%09d.png" or something similar to generate such a directory. Make sure the path ends in the path separator (likely \ on windows and / on unix)!
     pub fn new_from_directory_full_of_frames(images_directory: PathBuf) -> Result<Self, io::Error> {
         let dir_files_iter = fs::read_dir(&images_directory)?;
@@ -68,11 +71,12 @@ impl InputVideo {
     }
     pub fn get_dir(&self) -> &PathBuf { &self.images_directory }
     /// Equivalent to get_frame_fast with max_frames_distance = 0.
-    pub fn get_frame<'a>(&'a mut self, progress: f64) -> &'a mut crate::content::image::Image {
+    pub fn get_frame<'a>(&'a mut self, progress: f64) -> Option<&'a mut crate::content::image::Image> {
         self.get_frame_fast(progress, 0)
     }
-    /// If there is a frame that has already been loaded near the current frame, use that frame instead. DO NOT USE THIS FOR RENDERING THE FINAL VIDEO - IT WILL SKIP FRAMES WHENEVER IT POSSIBLY CAN!
-    pub fn get_frame_fast<'a>(&'a mut self, progress: f64, max_frames_distance: i8) -> &'a mut crate::content::image::Image {
+    /// If there is a frame that has already been loaded near the current frame, use that frame instead. DO NOT USE THIS FOR RENDERING THE FINAL VIDEO - IT WILL SKIP FRAMES WHENEVER IT POSSIBLY CAN! Returns None when there are no frames available (frames_image_data.is_empty()).
+    pub fn get_frame_fast<'a>(&'a mut self, progress: f64, max_frames_distance: i8) -> Option<&'a mut crate::content::image::Image> {
+        if self.frames_image_data.is_empty() { return None; };
         let mut index = ((self.get_length()-1) as f64 * progress).round() as usize;
         let offset = self.frames_image_data[index].0;
         if if let Some(o) = offset {
@@ -92,9 +96,9 @@ impl InputVideo {
             false
         } {
             // close enough, index was adjusted if necessary
-            &mut self.frames_image_data[index].1
+            Some(&mut self.frames_image_data[index].1)
         } else {
-            self.load_image_at_index(index)
+            Some(self.load_image_at_index(index))
         }
     }
     fn load_image_at_index<'a>(&'a mut self, index: usize) -> &'a mut crate::content::image::Image {

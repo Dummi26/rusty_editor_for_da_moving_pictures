@@ -13,12 +13,14 @@ impl<'a, T> MightBeRef<'a, T> {
 
 impl From<&char> for CharOrAction {
     fn from(ch: &char) -> Self {
+        //let mut buf = [0u8; 4]; eprintln!("'{}' ({:?})", ch, ch.encode_utf8(&mut buf));
         match ch {
-            '\n' => Self::Enter,
+            '\n' | '\r' => Self::Enter,
             '\x08' => Self::Backspace,
             '\x7F' => Self::Delete,
-            '\r' => Self::Ignored,
+            '\t' => Self::Tab,
             ch => Self::Char(ch.clone()),
+            _ => Self::Ignored,
         }
     }
 }
@@ -27,6 +29,7 @@ pub enum CharOrAction {
     Enter,
     Backspace,
     Delete,
+    Tab,
     Ignored,
 }
 

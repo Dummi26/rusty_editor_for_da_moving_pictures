@@ -203,7 +203,7 @@ impl VideoTree {
         fn vid_to_str(vid: &Video) -> String {
             match &vid.video.vt {
                 crate::video::VideoTypeEnum::List(_) => format!("List"),
-                crate::video::VideoTypeEnum::WithEffect(_, e) => match &e.effect {
+                crate::video::VideoTypeEnum::WithEffect(_, e) => format!("Effect: {}", match &e.effect {
                     effect::effects::EffectsEnum::Nothing(_) => format!("Nothing"),
                     effect::effects::EffectsEnum::BlackWhite(_) => format!("BlackWhite"),
                     effect::effects::EffectsEnum::Shake(e) => format!("Shake ({}x{}, {}x{})", e.shake_dist_x, e.shakes_count_x, e.shake_dist_y, e.shakes_count_y),
@@ -211,9 +211,9 @@ impl VideoTree {
                     effect::effects::EffectsEnum::ColorAdjust(e) => format!("ColorAdjust: {}", match &e.mode { effect::effects::ColorAdjust_Mode::Rgba(..) => "rgba", }),
                     effect::effects::EffectsEnum::Blur(e) => format!("Blur: {}", match &e.mode { effect::effects::Blur_Mode::Square {..} => "Square", effect::effects::Blur_Mode::Downscale {..} => "Downscale", }),
                     effect::effects::EffectsEnum::ColorKey(_) => format!("ColorKey"),
-                },
-                crate::video::VideoTypeEnum::Image(i) => format!("Image: {}", match i.path.file_name() { Some(n) => n.to_string_lossy().to_string(), None => i.path.to_string_lossy().to_string(), }),
-                crate::video::VideoTypeEnum::Raw(i) => format!("Vid: {}", i.get_dir().to_string_lossy().to_string()),
+                }),
+                crate::video::VideoTypeEnum::Image(i) => format!("Image: {}", match i.path().file_name() { Some(n) => n.to_string_lossy().to_string(), None => i.path().to_string_lossy().to_string(), }),
+                crate::video::VideoTypeEnum::Raw(i) => format!("Video: {}", i.get_dir().to_string_lossy().to_string()),
             }
         }
         

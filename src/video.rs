@@ -86,6 +86,7 @@ impl Content for Video {
             self.video.apply_changes();
             self.video.changes = Some(video);
             if !self.video.apply_changes() { err = true; };
+            out = true;
         };
         self.last_draw.clear_resolutions();
         out && !err
@@ -287,7 +288,9 @@ impl Video {
             VideoTypeEnum::Raw(raw_img) => {
                 //println!("Drawing RAW");
                 let img = raw_img.get_frame_fast(progress, render_settings.max_distance_when_retrieving_closest_frame);
-                img.draw(image, render_settings.image_scaling_filter_type);
+                if let Some(img) = img {
+                    img.draw(image, render_settings.image_scaling_filter_type);
+                };
             },
             
             
@@ -404,6 +407,25 @@ impl Content for VideoType {
                     };
                     true
                 },
+                (VideoTypeChanges::WithEffect(vid_changes, eff_new), VideoTypeEnum::WithEffect(vid, eff)) => {
+                    let mut out = true;
+                    if let Some(changes) = vid_changes {
+                        vid.as_content_changes = *changes;
+                        if !vid.apply_changes() { out = false; };
+                    };
+                    if let Some(eff_new) = eff_new {
+                        *eff = eff_new;
+                    };
+                    out
+                },
+                (VideoTypeChanges::Image(img_changes), VideoTypeEnum::Image(img)) => {
+                    img.as_content_changes = img_changes;
+                    img.apply_changes()
+                },
+                (VideoTypeChanges::Raw(changes), VideoTypeEnum::Raw(vid)) => {
+                    vid.as_content_changes = changes;
+                    vid.apply_changes()
+                },
                 (VideoTypeChanges::ChangeType(new), _) => {
                     self.vt = new;
                     true
@@ -424,7 +446,7 @@ impl Content for VideoType {
                     }), Clz::error_details(".")
                 ),
             }
-        } else { false }
+        } else { true }
     }
     
     fn generic_content_data(&mut self) -> &mut crate::content::content::GenericContentData { &mut self.generic_content_data }

@@ -10,6 +10,8 @@ pub enum EditorWindowLayoutRequest {
     SelectForEditing(u32),
     DeselectForEditing,
     EditingChangesApply(VideoChanges),
+    /// Like EditingChangesApply, but for when changes were applied by directly accessing the Video object through the Arc<Mutex<_>>. Unlike EditingChangesApply, this is not limited to editing the part that is selected as the one to be edited.
+    AppliedChangesToVideo,
 }
 
 impl EditorWindowHandler {
@@ -69,6 +71,7 @@ impl RequestActions {
                         } else {
                             println!("{}", Clz::progress("Did not apply changes."));
                         };
+                        self.edited_path_was_changed = true;
                         self.edited_part_requires_update = true;
                     } else {
                         panic!("\n{}\n{}{}{}\n",
@@ -76,7 +79,8 @@ impl RequestActions {
                             Clz::error_details("Index was "), Clz::error_cause(format!("{}", index).as_str()), Clz::error_details("."),
                         );
                     };
-                }
+                },
+                EditorWindowLayoutRequest::AppliedChangesToVideo => todo!(),
             };
         };
     }
