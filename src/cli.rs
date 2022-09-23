@@ -52,7 +52,7 @@ impl CustomArgs {
                     "OpenProjectInGui" => Action::OpenProjectInGui,
                     "ExportProjectToFrames" => Action::ExportProjectToFrames,
                     ac => panic!("\n{}{}{}\n    {}\n    {}\n",
-                        Clz::error_info("Invalid action '"), Clz::error_cause(ac), Clz::error_info("'! [action] in --action [æction] may only be one of the following:"),
+                        Clz::error_info("Invalid action '"), Clz::error_cause(ac), Clz::error_info("'! [action] in --action [action] may only be one of the following:"),
                         Clz::undecided("OpenProjectInGui"),
                         Clz::undecided("ExportProjectToFrames"),
                     ),

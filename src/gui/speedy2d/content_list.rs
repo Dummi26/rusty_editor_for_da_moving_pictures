@@ -14,15 +14,25 @@ pub enum EditorWindowLayoutContentEnum {
 
     SpecialQVidRunner(content::special::qvidrunner::QVidRunner),
 }
-
-impl EditorWindowLayoutContent {
-    pub fn replace(&mut self, new: Self) -> Self {
-        std::mem::replace(self, new)
+pub enum EditorWindowLayoutContentTypeEnum {
+    Placeholder,
+    VideoPreview,
+    VideoTree,
+    VideoPropertiesEditor,
+    LayoutHalf,
+    SpecialQVidRunner,
+}
+impl EditorWindowLayoutContentTypeEnum {
+    pub fn height_of_top_bar_in_type_preview_mode(&self) -> f32 {
+        match &self {
+            EditorWindowLayoutContentTypeEnum::VideoPreview |
+            EditorWindowLayoutContentTypeEnum::VideoTree |
+            EditorWindowLayoutContentTypeEnum::VideoPropertiesEditor => 0.05,
+            EditorWindowLayoutContentTypeEnum::Placeholder |
+            EditorWindowLayoutContentTypeEnum::LayoutHalf |
+            EditorWindowLayoutContentTypeEnum::SpecialQVidRunner => 0.025,
+        }
     }
-    pub fn take(&mut self) -> Self {
-        self.replace(content::placeholder::Placeholder::new().as_enum())
-    }
-
     pub fn height_of_top_bar_in_type_preview_mode_respecting_draw_mode(&self, draw_opts: &EditorWindowLayoutContentDrawOptions, in_pixels: bool) -> f32 {
         let height_of_top_bar_in_type_preview_mode = if in_pixels { self.height_of_top_bar_in_type_preview_mode_in_pixels(draw_opts) } else { self.height_of_top_bar_in_type_preview_mode() };
         match &draw_opts.draw_mode {
@@ -53,24 +63,23 @@ impl EditorWindowLayoutContent {
     pub fn height_of_top_bar_in_type_preview_mode_in_pixels(&self, draw_opts: &EditorWindowLayoutContentDrawOptions) -> f32 {
         self.height_of_top_bar_in_type_preview_mode() * draw_opts.render_canvas_size.1 as f32
     }
-    pub fn height_of_top_bar_in_type_preview_mode(&self) -> f32 {
-        match &self.c {
-            EditorWindowLayoutContentEnum::VideoPreview(_) |
-            EditorWindowLayoutContentEnum::VideoTree(_) |
-            EditorWindowLayoutContentEnum::VideoPropertiesEditor(_) => 0.05,
-            EditorWindowLayoutContentEnum::Placeholder(_) |
-            EditorWindowLayoutContentEnum::LayoutHalf(_) |
-            EditorWindowLayoutContentEnum::SpecialQVidRunner(_) => 0.025
-        }
+}
+impl EditorWindowLayoutContent {
+    pub fn replace(&mut self, new: Self) -> Self {
+        std::mem::replace(self, new)
     }
+    pub fn take(&mut self) -> Self {
+        self.replace(content::placeholder::Placeholder::new().as_enum())
+    }
+
     pub fn height_relative_from_pixels(draw_opts: &EditorWindowLayoutContentDrawOptions, height: f32) -> f32 { height / draw_opts.my_size_in_pixels.1 }
 }
 
 impl EditorWindowLayoutContent {
     pub fn was_changed(&self) -> bool { self.was_changed_custom() }
     pub fn draw_onto(&mut self, draw_opts: &mut EditorWindowLayoutContentDrawOptions, graphics: &mut Graphics2D, position: &(f32, f32, f32, f32), input: &mut UserInput) {
-        let height_of_top_bar_in_type_preview_mode = self.height_of_top_bar_in_type_preview_mode_in_pixels(draw_opts);
-        let height_of_top_bar = self.height_of_top_bar_in_type_preview_mode_respecting_draw_mode(draw_opts, true);
+        let height_of_top_bar_in_type_preview_mode = self.as_enum_type().height_of_top_bar_in_type_preview_mode_in_pixels(draw_opts);
+        let height_of_top_bar = self.as_enum_type().height_of_top_bar_in_type_preview_mode_respecting_draw_mode(draw_opts, true);
         let new_position = (position.0, position.1 + height_of_top_bar, position.2, (position.3 - height_of_top_bar).max(0.0));
         
         /* window title drawing */ {
@@ -103,7 +112,7 @@ impl EditorWindowLayoutContent {
     }
     pub fn handle_input(&mut self, draw_opts: &mut EditorWindowLayoutContentDrawOptions, input: &mut UserInput) {
         // handle input on top bar
-        let top_bar_height_in_px = self.height_of_top_bar_in_type_preview_mode_respecting_draw_mode(draw_opts, true);
+        let top_bar_height_in_px = self.as_enum_type().height_of_top_bar_in_type_preview_mode_respecting_draw_mode(draw_opts, true);
         let top_bar_height_relative = Self::height_relative_from_pixels(draw_opts, top_bar_height_in_px);
         match &draw_opts.draw_mode {
             EditorWindowLayoutContentDrawMode::Static(EditorWindowLayoutContentSDrawMode::TypePreview { moving: false, }) => {
@@ -177,6 +186,16 @@ impl EditorWindowLayoutContentTrait for EditorWindowLayoutContent {
     
     fn as_enum(self) -> self::EditorWindowLayoutContent {
         self
+    }
+    fn as_enum_type(&self) -> crate::gui::speedy2d::content_list::EditorWindowLayoutContentTypeEnum {
+        match &self.c {
+            EditorWindowLayoutContentEnum::Placeholder(_) => EditorWindowLayoutContentTypeEnum::Placeholder,
+            EditorWindowLayoutContentEnum::VideoPreview(_) => EditorWindowLayoutContentTypeEnum::VideoPreview,
+            EditorWindowLayoutContentEnum::VideoTree(_) => EditorWindowLayoutContentTypeEnum::VideoTree,
+            EditorWindowLayoutContentEnum::VideoPropertiesEditor(_) => EditorWindowLayoutContentTypeEnum::VideoPropertiesEditor,
+            EditorWindowLayoutContentEnum::LayoutHalf(_) => EditorWindowLayoutContentTypeEnum::LayoutHalf,
+            EditorWindowLayoutContentEnum::SpecialQVidRunner(_) => EditorWindowLayoutContentTypeEnum::SpecialQVidRunner,
+        }
     }
 
     fn as_window_title(&self) -> String {

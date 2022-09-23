@@ -15,6 +15,7 @@ pub trait EditorWindowLayoutContentTrait {
     fn handle_input_custom(&mut self, draw_opts: &mut EditorWindowLayoutContentDrawOptions, input: &mut UserInput);
     /// Wraps self in the enum.
     fn as_enum(self) -> content_list::EditorWindowLayoutContent;
+    fn as_enum_type(&self) -> content_list::EditorWindowLayoutContentTypeEnum;
     /// In TypePreview mode, this determines the text that is displayed above the preview, in the box that allows users to drag the content "window" around.
     fn as_window_title(&self) -> String;
     /// Used to indicate to the 

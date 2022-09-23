@@ -29,14 +29,13 @@ struct AnyTabInfo {
     hovered: bool,
     hovered_changed: Option<Instant>,
 }
-enum ExtraTabsInfo {
+pub enum ExtraTabsInfo {
     General,
     PosX,
     PosY,
     PosW,
     PosH,
-    Start,
-    Length,
+    StartAndLength(f64, f64),
     ChangeType,
 
     ListEdit,
@@ -201,6 +200,7 @@ impl EditorWindowLayoutContentTrait for VideoPropertiesEditor {
         match self.editing.0.take() {
             Some(mut editing) => {
                 let mut tabs = std::mem::replace(&mut self.tabs, Vec::new());
+                let mouse_pos = self.get_inner_mouse_position(draw_opts.my_size_in_pixels.1, &input.clonable.mouse_pos);
                 match (&mut tabs[self.tab.0], &mut editing.1.video.vt) {
                     (ExtraTabsInfo::General, _) => {
                         match &input.owned.action {
@@ -210,17 +210,15 @@ impl EditorWindowLayoutContentTrait for VideoPropertiesEditor {
                                 MouseAction::Moved => (),
                                 MouseAction::ButtonDown(_) => (),
                                 MouseAction::ButtonUp(btn) => {
-                                    println!("General tab");
-                                    let possibilities = 7;
+                                    let possibilities = 6;
                                     let mouse_pos = self.get_inner_mouse_position(draw_opts.my_size_in_pixels.1, &input.clonable.mouse_pos);
                                     let mouse_index = if 0.0 < mouse_pos.0 && mouse_pos.0 < 1.0 && 0.0 < mouse_pos.1 && mouse_pos.1 < 1.0 {
                                         Some(((mouse_pos.1 * possibilities as f32).floor() as usize).min(possibilities - 1))
                                     } else { None };
-                                    eprintln!("mp {:?}", mouse_index);
                                     if let Some(mouse_index) = mouse_index {
                                         match mouse_index {
                                             0 => {
-                                                if let Some(index) = self.get_extra_tabs_index_where(|e| match e { ExtraTabsInfo::PosX => true, _ => false, }) {
+                                                if let Some(index) = Self::get_extra_tabs_index_where(&tabs, |e| match e { ExtraTabsInfo::PosX => true, _ => false, }) {
                                                     self.change_tab_to(index, false);
                                                 } else {
                                                     self.change_tab_to(tabs.len(), false);
@@ -228,7 +226,7 @@ impl EditorWindowLayoutContentTrait for VideoPropertiesEditor {
                                                 };
                                             },
                                             1 => {
-                                                if let Some(index) = self.get_extra_tabs_index_where(|e| match e { ExtraTabsInfo::PosY => true, _ => false, }) {
+                                                if let Some(index) = Self::get_extra_tabs_index_where(&tabs, |e| match e { ExtraTabsInfo::PosY => true, _ => false, }) {
                                                     self.change_tab_to(index, false);
                                                 } else {
                                                     self.change_tab_to(tabs.len(), false);
@@ -236,7 +234,7 @@ impl EditorWindowLayoutContentTrait for VideoPropertiesEditor {
                                                 };
                                             },
                                             2 => {
-                                                if let Some(index) = self.get_extra_tabs_index_where(|e| match e { ExtraTabsInfo::PosW => true, _ => false, }) {
+                                                if let Some(index) = Self::get_extra_tabs_index_where(&tabs, |e| match e { ExtraTabsInfo::PosW => true, _ => false, }) {
                                                     self.change_tab_to(index, false);
                                                 } else {
                                                     self.change_tab_to(tabs.len(), false);
@@ -244,7 +242,7 @@ impl EditorWindowLayoutContentTrait for VideoPropertiesEditor {
                                                 };
                                             },
                                             3 => {
-                                                if let Some(index) = self.get_extra_tabs_index_where(|e| match e { ExtraTabsInfo::PosH => true, _ => false, }) {
+                                                if let Some(index) = Self::get_extra_tabs_index_where(&tabs, |e| match e { ExtraTabsInfo::PosH => true, _ => false, }) {
                                                     self.change_tab_to(index, false);
                                                 } else {
                                                     self.change_tab_to(tabs.len(), false);
@@ -252,23 +250,15 @@ impl EditorWindowLayoutContentTrait for VideoPropertiesEditor {
                                                 };
                                             },
                                             4 => {
-                                                if let Some(index) = self.get_extra_tabs_index_where(|e| match e { ExtraTabsInfo::Start => true, _ => false, }) {
+                                                if let Some(index) = Self::get_extra_tabs_index_where(&tabs, |e| match e { ExtraTabsInfo::StartAndLength(..) => true, _ => false, }) {
                                                     self.change_tab_to(index, false);
                                                 } else {
                                                     self.change_tab_to(tabs.len(), false);
-                                                    tabs.push(ExtraTabsInfo::Start);
+                                                    tabs.push(ExtraTabsInfo::StartAndLength(editing.1.set_start_frame, editing.1.set_length));
                                                 };
                                             },
                                             5 => {
-                                                if let Some(index) = self.get_extra_tabs_index_where(|e| match e { ExtraTabsInfo::Length => true, _ => false, }) {
-                                                    self.change_tab_to(index, false);
-                                                } else {
-                                                    self.change_tab_to(tabs.len(), false);
-                                                    tabs.push(ExtraTabsInfo::Length);
-                                                };
-                                            },
-                                            6 => {
-                                                if let Some(index) = self.get_extra_tabs_index_where(|e| match e { ExtraTabsInfo::ChangeType => true, _ => false, }) {
+                                                if let Some(index) = Self::get_extra_tabs_index_where(&tabs, |e| match e { ExtraTabsInfo::ChangeType => true, _ => false, }) {
                                                     self.change_tab_to(index, false);
                                                 } else {
                                                     self.change_tab_to(tabs.len(), false);
@@ -283,6 +273,29 @@ impl EditorWindowLayoutContentTrait for VideoPropertiesEditor {
                             },
                         };
                     },
+                    (ExtraTabsInfo::StartAndLength(start, end), _) => {
+                        match &input.owned.action {
+                            crate::gui::speedy2d::layout::InputAction::Mouse(action) => match action {
+                                MouseAction::Moved | MouseAction::ButtonUp(speedy2d::window::MouseButton::Left) => {
+                                    if input.owned.mouse_down_buttons.contains_key(&speedy2d::window::MouseButton::Left) {
+                                        if 0.0 < mouse_pos.0 && mouse_pos.0 < 1.0 && 0.0 < mouse_pos.1 && mouse_pos.1 < 1.0 {
+                                            match (mouse_pos.1 * 4.0).floor() as i32 {
+                                                0 => {},
+                                                1 => *start = ((mouse_pos.0 as f64 - 0.05) / 0.9).max(0.0).min(*end),
+                                                2 => *end = ((mouse_pos.0 as f64 - 0.05) / 0.9).max(*start).min(1.0),
+                                                3 => {
+                                                    self.data().requests.push(EditorWindowLayoutRequest::EditingChangesApply(VideoChanges { pos: None, start: Some(*start), length: Some(*end - *start), video: None, }));
+                                                },
+                                                _ => (),
+                                            };
+                                        };
+                                    };
+                                },
+                                _ => (),
+                            }
+                            _ => (),
+                        }
+                    }
                     (ExtraTabsInfo::ListAdd, VideoTypeEnum::List(_)) => {
                         match &input.owned.action {
                             crate::gui::speedy2d::layout::InputAction::None |
@@ -292,7 +305,6 @@ impl EditorWindowLayoutContentTrait for VideoPropertiesEditor {
                                 MouseAction::ButtonDown(_) => (),
                                 MouseAction::ButtonUp(btn) => {
                                     let possibilities = 4;
-                                    let mouse_pos = self.get_inner_mouse_position(draw_opts.my_size_in_pixels.1, &input.clonable.mouse_pos);
                                     let mouse_index = if 0.0 < mouse_pos.0 && mouse_pos.0 < 1.0 && 0.0 < mouse_pos.1 && mouse_pos.1 < 1.0 {
                                         Some(((mouse_pos.1 * possibilities as f32).floor() as usize).min(possibilities - 1))
                                     } else { None };
@@ -343,7 +355,6 @@ impl EditorWindowLayoutContentTrait for VideoPropertiesEditor {
                                         },
                                     },
                                     useful::CharOrAction::Enter => {
-                                        eprintln!("Pushing changes: New Path: {}", path.display());
                                         self.data().requests.push(EditorWindowLayoutRequest::EditingChangesApply(VideoChanges {
                                             video: Some(VideoTypeChanges::Image(ImageChanges {
                                                 path: Some(path.clone()),
@@ -379,6 +390,9 @@ impl EditorWindowLayoutContentTrait for VideoPropertiesEditor {
     
     fn as_enum(self) -> crate::gui::speedy2d::content_list::EditorWindowLayoutContent {
         EditorWindowLayoutContentEnum::VideoPropertiesEditor(self).into()
+    }
+    fn as_enum_type(&self) -> crate::gui::speedy2d::content_list::EditorWindowLayoutContentTypeEnum {
+        crate::gui::speedy2d::content_list::EditorWindowLayoutContentTypeEnum::VideoPropertiesEditor
     }
 
     fn as_window_title(&self) -> String {
@@ -484,8 +498,7 @@ impl VideoPropertiesEditor {
                         ExtraTabsInfo::PosY => "y",
                         ExtraTabsInfo::PosW => "w",
                         ExtraTabsInfo::PosH => "h",
-                        ExtraTabsInfo::Start => "s",
-                        ExtraTabsInfo::Length => "l",
+                        ExtraTabsInfo::StartAndLength(..) => "t",
                         ExtraTabsInfo::ChangeType => "ct",
                         ExtraTabsInfo::ListEdit => "L",
                         ExtraTabsInfo::ListAdd => "+",
@@ -510,12 +523,11 @@ impl VideoPropertiesEditor {
                     if hovered > 0.0 {
                         let text = font.layout_text(match tab {
                         ExtraTabsInfo::General => "general",
-                        ExtraTabsInfo::PosX => "x-posiiton",
+                        ExtraTabsInfo::PosX => "x-position",
                         ExtraTabsInfo::PosY => "y-position",
                         ExtraTabsInfo::PosW => "width",
                         ExtraTabsInfo::PosH => "height",
-                        ExtraTabsInfo::Start => "start time",
-                        ExtraTabsInfo::Length => "length",
+                        ExtraTabsInfo::StartAndLength(..) => "time (start/length)",
                         ExtraTabsInfo::ChangeType => "change type",
                         ExtraTabsInfo::ListEdit => "edit list",
                         ExtraTabsInfo::ListAdd => "add to list",
@@ -576,7 +588,7 @@ impl VideoPropertiesEditor {
                     match (tab, &mut editing_video.video.vt) {
                         (ExtraTabsInfo::General, _) => {
                             // DRAW: GENERAL
-                            let opts = ["x-position", "y-position", "width", "height", "start", "length", "change type"];
+                            let opts = ["x-position", "y-position", "width", "height", "time", "change type"];
                             let options = opts.len();
                             let h = position.3 / options as f32;
                             for (opt, txt) in opts.into_iter().enumerate() {
@@ -584,6 +596,16 @@ impl VideoPropertiesEditor {
                                 graphics.draw_line(Vector2 { x: position.0, y, }, Vector2 { x: position.0 + position.2, y, }, 1.0, Color::from_rgba(1.0, 1.0, 1.0, vis));
                                 graphics.draw_text(Vector2 { x: position.0, y: y + 0.25 * h, }, Color::from_rgba(1.0, 1.0, 1.0, vis), &font.layout_text(txt, h * 0.5, TextOptions::new()));
                             };
+                        },
+                        (ExtraTabsInfo::StartAndLength(start, end), _) => {
+                            let y = position.1 + position.3 * 0.375;
+                            graphics.draw_line(Vector2 { x: position.0 + 0.05 * position.2, y: y, }, Vector2 { x: position.0 + (0.05 + 0.9 * *start as f32) * position.2, y: y, }, per_item_height * 0.1, Color::from_rgba(if editing_video.set_start_frame == *start { 0.5 } else { 1.0 }, 0.5, 0.5, vis));
+                            let y = position.1 + position.3 * 0.625;
+                            graphics.draw_line(Vector2 { x: position.0 + 0.05 * position.2, y: y, }, Vector2 { x: position.0 + (0.05 + 0.9 * *end as f32) * position.2, y: y, }, per_item_height * 0.1, Color::from_rgba(if editing_video.set_length == *end - *start { 0.5 } else { 1.0 }, 0.5, 0.5, vis));
+                            let text = font.layout_text(format!("from {}\nto {}", start, end).as_str(), per_item_height * 0.9, TextOptions::new().with_wrap_to_width(position.2, TextAlignment::Center));
+                            graphics.draw_text(Vector2 { x: position.0, y: position.1, }, Color::from_rgba(1.0, 1.0, 1.0, vis), &text);
+                            let text = font.layout_text("click to apply", per_item_height * 0.9, TextOptions::new().with_wrap_to_width(position.2, TextAlignment::Center));
+                            graphics.draw_text(Vector2 { x: position.0, y: position.1 + position.3 - text.height(), }, Color::from_rgba(1.0, 1.0, 1.0, vis), &text);
                         },
                         (tab, VideoTypeEnum::List(vec)) => match tab {
                             ExtraTabsInfo::ListEdit => {
@@ -670,8 +692,8 @@ impl VideoPropertiesEditor {
 
 
 
-    pub fn get_extra_tabs_index_where(&self, f: fn(&ExtraTabsInfo) -> bool) -> Option<usize> {
-        for (i, extra_tab) in self.tabs.iter().enumerate() {
+    pub fn get_extra_tabs_index_where(tabs: &Vec<ExtraTabsInfo>, f: fn(&ExtraTabsInfo) -> bool) -> Option<usize> {
+        for (i, extra_tab) in tabs.iter().enumerate() {
             if f(extra_tab) {
                 return Some(i);
             };

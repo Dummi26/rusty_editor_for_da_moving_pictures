@@ -47,6 +47,9 @@ impl EditorWindowLayoutContentTrait for QVidRunner {
     fn as_enum(self) -> crate::gui::speedy2d::content_list::EditorWindowLayoutContent {
         EditorWindowLayoutContentEnum::SpecialQVidRunner(self).into()
     }
+    fn as_enum_type(&self) -> crate::gui::speedy2d::content_list::EditorWindowLayoutContentTypeEnum {
+        crate::gui::speedy2d::content_list::EditorWindowLayoutContentTypeEnum::SpecialQVidRunner
+    }
 
     fn as_window_title(&self) -> String {
         "QVidRunner".to_string()

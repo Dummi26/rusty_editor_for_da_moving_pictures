@@ -28,6 +28,9 @@ impl EditorWindowLayoutContentTrait for Placeholder {
     fn as_enum(self) -> crate::gui::speedy2d::content_list::EditorWindowLayoutContent {
         EditorWindowLayoutContentEnum::Placeholder(self).into()
     }
+    fn as_enum_type(&self) -> crate::gui::speedy2d::content_list::EditorWindowLayoutContentTypeEnum {
+        crate::gui::speedy2d::content_list::EditorWindowLayoutContentTypeEnum::Placeholder
+    }
 
     fn as_window_title(&self) -> String {
         format!("placeholder")

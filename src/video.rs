@@ -27,8 +27,8 @@ pub struct Video {
 #[derive(Default)]
 pub struct VideoChanges {
     pub pos: Option<(Option<Curve>, Option<Curve>, Option<Curve>, Option<Curve>)>,
-    pub start: Option<(f64, f64)>,
-    pub length: Option<(f64, f64)>,
+    pub start: Option<f64>,
+    pub length: Option<f64>,
     pub video: Option<VideoTypeChanges>,
 }
 impl Content for Video {
@@ -75,11 +75,11 @@ impl Content for Video {
             out = true;
         };
         if let Some(start) = self.as_content_changes.start.take() {
-            self.set_start_frame = start.1;
+            self.set_start_frame = start;
             out = true;
         };
         if let Some(length) = self.as_content_changes.length.take() {
-            self.set_length = length.1;
+            self.set_length = length;
             out = true;
         };
         if let Some(video) = self.as_content_changes.video.take() {
