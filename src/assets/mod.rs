@@ -7,6 +7,6 @@ mod assets_path;
 
 #[derive(Default)]
 pub struct AssetsManager {
-    assets_path: Option<PathBuf>,
-    default_font: Option<Font>,
+    pub assets_path: Option<PathBuf>,
+    pub default_font: Option<Font>,
 }

@@ -28,6 +28,7 @@ pub struct CustomArgs {
     pub project_path: Option<PathBuf>,
     pub action: Option<Action>,
     pub export_options: Option<crate::video_export_settings::VideoExportSettings>,
+    pub assets_path: Option<PathBuf>,
 }
 
 #[derive(Debug)]
@@ -60,7 +61,7 @@ impl CustomArgs {
                 _ => panic!("\n{}\n",
                     Clz::error_info("action requires one argument: --action [action]."),
                 ),
-            }
+            },
             "export-options" => match arg.len() - 1 {
                 4 => self.export_options = Some(crate::video_export_settings::VideoExportSettings {
                     output_path: PathBuf::from(arg[1].as_str()),
@@ -89,11 +90,26 @@ impl CustomArgs {
                 _ => panic!("\n{}\n",
                     Clz::error_info("export-options requires 4 arguments: --export-options [output path] [width] [height] [frames]"),
                 ),
-            }
-            invalid_arg => panic!("\n{} {} {}\n    {} {}\n    {} {}\n{}\n",
+            },
+            "assets-dir" => match arg.len() - 1 {
+                1 => {
+                    let path = PathBuf::from(arg[1].clone());
+                    if !path.is_dir() {
+                        panic!("\n{}{}{}\n",
+                            Clz::error_info("The assets directory '"), Clz::error_cause(path.to_string_lossy().to_string().as_str()), Clz::error_info("' does not exist or points to a file.")
+                        );
+                    };
+                    self.assets_path = Some(path);
+                },
+                _ => panic!("\n{}\n",
+                    Clz::error_info("Please specify a file following the assets-dir option!"),
+                ),
+            },
+            invalid_arg => panic!("\n{} {} {}\n    {} {}\n    {} {}\n    {} {}\n{}\n",
                 Clz::error_info("--arg"), Clz::error_cause(invalid_arg), Clz::error_info("is invalid. Valid args are:"),
                 Clz::error_info("proj-path"), Clz::error_info("[path]"),
                 Clz::error_info("action"), Clz::error_info("[action]"),
+                Clz::error_info("assets-dir"), Clz::error_info("[dir]"),
                 Clz::error_info("To use these: --[arg] [...], for example: '--proj-path \"/path/to/file.txt\"'."),
             ),
         };

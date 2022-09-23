@@ -143,6 +143,10 @@ impl EditorWindowHandler {
             }
         };
         project.vid.cache();
+
+        let mut assets_manager = AssetsManager::default();
+        assets_manager.assets_path = args.assets_path.clone();
+
         Self {
             creation_time: Instant::now(),
             start_time: Instant::now(),
@@ -155,7 +159,7 @@ impl EditorWindowHandler {
                 force_redraw_due_to_resize: false,
                 render_canvas_size: (0, 0),
                 my_size_in_pixels: (0.0, 0.0),
-                assets_manager: AssetsManager::default(),
+                assets_manager,
                 draw_mode: EditorWindowLayoutContentDrawMode::Static(EditorWindowLayoutContentSDrawMode::Normal),
             },
             draw_mode: EditorWindowHandlerDrawMode::Static(EditorWindowLayoutContentSDrawMode::Normal),
