@@ -2,11 +2,11 @@ use std::sync::{Arc, Mutex};
 
 use crate::{video::{Video, VideoChanges}, content::content::Content, cli::Clz, useful};
 
-use super::{EditorWindowHandler, content_list::{EditorWindowLayoutContent, EditorWindowLayoutContentEnum}, layout::EditorWindowLayoutContentTrait, content::placeholder::Placeholder};
+use super::{EditorWindowHandler, content_list::{EditorWindowLayoutContent, EditorWindowLayoutContentEnum, EditorWindowLayoutContentTypeEnum}, layout::EditorWindowLayoutContentTrait, content::placeholder::Placeholder};
 
 pub enum EditorWindowLayoutRequest {
-    TypePreviewModeBecomeDraggedWindowStart { size: (f32, f32), grab_position: (f32, f32), },
-    TypePreviewModeBecomeDraggedWindowEnd,
+    TypePreviewModeBecomeDraggedWindow { size: (f32, f32), grab_position: (f32, f32), take: bool, },
+    ChangeMeTo(EditorWindowLayoutContentTypeEnum),
     SelectForEditing(u32),
     DeselectForEditing,
     EditingChangesApply(VideoChanges),
@@ -30,24 +30,38 @@ impl RequestActions {
         let requests = std::mem::replace(&mut content.data().requests, Vec::new());
         for request in requests {
             match request {
-                EditorWindowLayoutRequest::TypePreviewModeBecomeDraggedWindowStart { size, grab_position } => {
-                    if let EditorWindowLayoutContentEnum::Placeholder(_) = content.c {
-                        if let Some(dragged) = self.dragged_window.take() {
-                            *content = dragged.0;
-                        };
-                    } else {
-                        if let None = self.dragged_window {
-                            let content = std::mem::replace(content, Placeholder::new().as_enum());
-                            self.dragged_window = Some((content, size, grab_position));
+                EditorWindowLayoutRequest::TypePreviewModeBecomeDraggedWindow { size, grab_position, take } => {
+                    if !self.dragged_window_already_set {
+                        self.dragged_window_already_set = true;
+                        if take || self.dragged_window.is_some() {
+                            let replace_with = if let Some(dragged) = self.dragged_window.take() {
+                                dragged.0.as_enum()
+                            } else {
+                                Placeholder::new().as_enum()
+                            };
+                            match content.c { // the ones that can't be replaced (they will consume the dragged window)
+                                EditorWindowLayoutContentEnum::SpecialQVidRunner(_) => (),
+                                _ => {
+                                    let content = std::mem::replace(content, replace_with);
+                                    match content.c { // the ones that can be replaced without becoming a new dragged window
+                                        EditorWindowLayoutContentEnum::Placeholder(_) => (),
+                                        _ => self.dragged_window = Some((content, size, grab_position)),
+                                    };
+                                },
+                            };
                         };
                     };
                 },
-                EditorWindowLayoutRequest::TypePreviewModeBecomeDraggedWindowEnd => {
-                    if let EditorWindowLayoutContentEnum::Placeholder(_) = content.c {
-                        if let Some(dragged) = self.dragged_window.take() {
-                            *content = dragged.0;
-                        };
+                EditorWindowLayoutRequest::ChangeMeTo(new) => {
+                    let new = match new {
+                        EditorWindowLayoutContentTypeEnum::Placeholder => None,
+                        EditorWindowLayoutContentTypeEnum::VideoPreview => None,
+                        EditorWindowLayoutContentTypeEnum::VideoTree => Some(crate::gui::speedy2d::content::video_tree::VideoTree::new(self.video.clone()).as_enum()),
+                        EditorWindowLayoutContentTypeEnum::VideoPropertiesEditor => Some(crate::gui::speedy2d::content::video_properties_editor::VideoPropertiesEditor::new(self.video.clone()).as_enum()),
+                        EditorWindowLayoutContentTypeEnum::LayoutHalf => Some(crate::gui::speedy2d::content::layout::half::Half::new_placeholders(false, 0.5).as_enum()),
+                        EditorWindowLayoutContentTypeEnum::SpecialQVidRunner => None,
                     };
+                    if let Some(new) = new { *content = new; };
                 },
                 EditorWindowLayoutRequest::SelectForEditing(path) => /*if let None = self.edited_part*/ {
                     if self.edited_part != Some(path) {
@@ -91,6 +105,7 @@ impl RequestActions {
         Self {
             video: container.project.vid.get_vid_mutex_arc(),
             dragged_window: container.dragged_window.take(),
+            dragged_window_already_set: false,
             edited_part: container.edited_part.take(),
             edited_path_was_changed: false,
             edited_part_requires_update: false,
@@ -117,6 +132,7 @@ impl RequestActions {
 struct RequestActions {
     pub video: Arc<Mutex<Video>>,
     pub dragged_window: Option<(EditorWindowLayoutContent, (f32, f32), (f32, f32))>,
+    pub dragged_window_already_set: bool,
     pub edited_part: Option<u32>,
     pub edited_path_was_changed: bool,
     pub edited_part_requires_update: bool,

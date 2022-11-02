@@ -19,7 +19,9 @@ impl Half {
         self.split = v.max(0.0).min(1.0);
         self.was_changed = true;
     }
+    /// Returns the handle size in pixels
     fn get_handle_size(&self) -> f32 { 15.0 }
+    /// (pixels, relative)
     fn get_handle_size_draw_mode(&self, draw_opts: &EditorWindowLayoutContentDrawOptions) -> (f32, f32) {
         let v = match &draw_opts.draw_mode {
             EditorWindowLayoutContentDrawMode::Static(mode) => match mode {
@@ -131,21 +133,26 @@ impl EditorWindowLayoutContentTrait for Half {
                         InputAction::Mouse(action) => match action {
                             MouseAction::ButtonDown(btn) => match btn {
                                 MouseButton::Left => {
+                                    let max_dist_for_horizontal_mouse = 0.02;
                                     if self.vertical {
-                                        let (_handle_size, handle_size_rel) = self.get_handle_size_draw_mode(&draw_opts);
-                                        let top_bar_info = self.get_top_bar_infos(draw_opts);
-                                        let mouse_split_val = input.clonable.mouse_pos.1;
-                                        let mouse_split_diff = mouse_split_val - self.get_split_with_top_bars(top_bar_info, 0.0);
-                                        if mouse_split_diff.abs() < 0.02 {
-                                            self.set_split_with_top_bars(mouse_split_val, top_bar_info, handle_size_rel);
-                                            self.mouse_dragging_split_bar = true;
+                                        if input.clonable.mouse_pos.0 >= -max_dist_for_horizontal_mouse && input.clonable.mouse_pos.0 <= 1.0 + max_dist_for_horizontal_mouse {
+                                            let (_handle_size, handle_size_rel) = self.get_handle_size_draw_mode(&draw_opts);
+                                            let top_bar_info = self.get_top_bar_infos(draw_opts);
+                                            let mouse_split_val = input.clonable.mouse_pos.1;
+                                            let mouse_split_diff = mouse_split_val - self.get_split_with_top_bars(top_bar_info, 0.0);
+                                            if mouse_split_diff.abs() < self.get_handle_size_draw_mode(draw_opts).1 {
+                                                self.set_split_with_top_bars(mouse_split_val, top_bar_info, handle_size_rel);
+                                                self.mouse_dragging_split_bar = true;
+                                            };
                                         };
                                     } else {
-                                        let mouse_split_val = input.clonable.mouse_pos.0;
-                                        let mouse_split_diff = mouse_split_val - self.split;
-                                        if mouse_split_diff.abs() < 0.02 {
-                                            self.set_split(mouse_split_val);
-                                            self.mouse_dragging_split_bar = true;
+                                        if input.clonable.mouse_pos.1 >= -max_dist_for_horizontal_mouse && input.clonable.mouse_pos.1 <= 1.0 + max_dist_for_horizontal_mouse {
+                                            let mouse_split_val = input.clonable.mouse_pos.0;
+                                            let mouse_split_diff = mouse_split_val - self.split;
+                                            if mouse_split_diff.abs() < max_dist_for_horizontal_mouse {
+                                                self.set_split(mouse_split_val);
+                                                self.mouse_dragging_split_bar = true;
+                                            };
                                         };
                                     };
                                 },
@@ -193,7 +200,8 @@ impl EditorWindowLayoutContentTrait for Half {
 
             let (first, second, _) = self.modify_mouse(draw_opts, input);
             let psize_px = if self.vertical { draw_opts.my_size_in_pixels.1 } else { draw_opts.my_size_in_pixels.0 };
-            *if self.vertical { &mut draw_opts.my_size_in_pixels.1 } else { &mut draw_opts.my_size_in_pixels.0 } = psize_px * self.split - if self.vertical { self.as_enum_type().height_of_top_bar_in_type_preview_mode_in_pixels(draw_opts) } else { 0.0 };
+            *if self.vertical { &mut draw_opts.my_size_in_pixels.1 } else { &mut draw_opts.my_size_in_pixels.0 } = psize_px * self.split; // TOOD: check line below
+            //  - if self.vertical { self.as_enum_type().height_of_top_bar_in_type_preview_mode_in_pixels(draw_opts) } else { 0.0 }
             let old = input.replace_clonable(first);
             self.elems[0].handle_input(draw_opts, input);
 
@@ -248,16 +256,15 @@ impl Half {
         let split = self.get_split_with_top_bars(top_bar_info, handle_size.1);
 
         let is_first = if self.vertical {
-            println!("y: {}", clonable_first.mouse_pos.1);
-            clonable_first.mouse_pos.1 /= self.split;
-            clonable_second.mouse_pos.1 -= split + self.get_handle_size_draw_mode(draw_opts).1;
-            clonable_second.mouse_pos.1 /= 1.0 - (split + self.get_handle_size_draw_mode(draw_opts).1);
+            clonable_first.mouse_pos.1 /= split;
+            clonable_second.mouse_pos.1 -= split + handle_size.1;
+            clonable_second.mouse_pos.1 /= 1.0 - (split + handle_size.1);
             input.clonable.mouse_pos.1 < split
         } else {
-            clonable_first.mouse_pos.0 /= split;
-            clonable_second.mouse_pos.0 -= split;
-            clonable_second.mouse_pos.0 /= 1.0 - split;
-            input.clonable.mouse_pos.0 < split
+            clonable_first.mouse_pos.0 /= self.split;
+            clonable_second.mouse_pos.0 -= self.split;
+            clonable_second.mouse_pos.0 /= 1.0 - self.split;
+            input.clonable.mouse_pos.0 < self.split
         };
         (clonable_first, clonable_second, is_first)
     }

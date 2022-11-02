@@ -122,7 +122,7 @@ impl EditorWindowLayoutContent {
                         MouseAction::ButtonDown(btn) => match btn {
                             speedy2d::window::MouseButton::Left => {
                                 if 0.0 < input.clonable.mouse_pos.0 && input.clonable.mouse_pos.0 < 1.0 && 0.0 < input.clonable.mouse_pos.1 && input.clonable.mouse_pos.1 < top_bar_height_relative {
-                                    self.data().requests.push(EditorWindowLayoutRequest::TypePreviewModeBecomeDraggedWindowStart { size: draw_opts.my_size_in_pixels.clone(), grab_position: input.clonable.mouse_pos.clone(), });
+                                    self.data().requests.push(EditorWindowLayoutRequest::TypePreviewModeBecomeDraggedWindow { size: draw_opts.my_size_in_pixels.clone(), grab_position: input.clonable.mouse_pos.clone(), take: true, });
                                 };
                             },
                             _ => (),
@@ -130,7 +130,7 @@ impl EditorWindowLayoutContent {
                         MouseAction::ButtonUp(btn) => match btn {
                             speedy2d::window::MouseButton::Left => {
                                 if 0.0 < input.clonable.mouse_pos.0 && input.clonable.mouse_pos.0 < 1.0 && 0.0 < input.clonable.mouse_pos.1 && input.clonable.mouse_pos.1 < 1.0 {
-                                    self.data().requests.push(EditorWindowLayoutRequest::TypePreviewModeBecomeDraggedWindowEnd);
+                                    self.data().requests.push(EditorWindowLayoutRequest::TypePreviewModeBecomeDraggedWindow { size: draw_opts.my_size_in_pixels.clone(), grab_position: input.clonable.mouse_pos.clone(), take: false, }); // this is used for both putting something into as well as retrieving something from dragged_window.
                                 };
                             },
                             _ => (),

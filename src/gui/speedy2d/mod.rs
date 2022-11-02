@@ -104,9 +104,12 @@ impl EditorWindowHandlerDrawMode {
 impl EditorWindowHandler {
     pub fn new(args: &crate::cli::CustomArgs) -> Self {
         fn project_gen_new_empty() -> Project {
-            Project { proj: crate::project::ProjectData { name: "Unnamed project".to_string(), path: None, render_settings_export: None, }, vid: crate::multithreading::automatically_cache_frames::VideoWithAutoCache::new(crate::video::Video::new_full(
-                crate::video::VideoType::new(crate::video::VideoTypeEnum::List(Vec::new()))
-            )), }
+            Project {
+                proj: crate::project::ProjectData { name: "Unnamed project".to_string(), path: None, render_settings_export: None, },
+                vid: crate::multithreading::automatically_cache_frames::VideoWithAutoCache::new(crate::video::Video::new_full(
+                    crate::video::VideoType::new(crate::video::VideoTypeEnum::List(Vec::new()))
+                )),
+            }
         }
         let mut project = match &args.project_path {
             Some(path) => {
@@ -517,7 +520,7 @@ impl WindowHandler for EditorWindowHandler {
                             let layout = self.layout.take();
                             self.layout.replace(
                                 content::layout::half::Half::new([
-                                    content::special::qvidrunner::QVidRunner::new().as_enum(),
+                                    content::special::qvidrunner::QVidRunner::new(content::special::qvidrunner::QVidRunnerMode::Normal).as_enum(),
                                     layout,
                                 ], true, 0.0).as_enum()
                             );

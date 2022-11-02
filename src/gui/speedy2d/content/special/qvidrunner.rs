@@ -1,8 +1,14 @@
-use speedy2d::{window::VirtualKeyCode, dimen::Vector2, color::Color, font::{TextOptions, TextLayout}};
+use speedy2d::{dimen::Vector2, color::Color, font::{TextOptions, TextLayout}};
 
 use crate::{gui::speedy2d::{layout::{EditorWindowLayoutContentTrait, EditorWindowLayoutContentData}, content_list::EditorWindowLayoutContentEnum}, useful};
 
+pub enum QVidRunnerMode {
+    /// The user opened QVidRunner (probably through a keyboard shortcut)
+    Normal,
+}
+
 pub struct QVidRunner {
+    mode: QVidRunnerMode,
     pub query: String,
     layout_content_data: EditorWindowLayoutContentData,
 }
@@ -65,7 +71,7 @@ impl EditorWindowLayoutContentTrait for QVidRunner {
 }
 
 impl QVidRunner {
-    pub fn new() -> Self {
-        Self { query: String::new(), layout_content_data: EditorWindowLayoutContentData::default(), }
+    pub fn new(mode: QVidRunnerMode) -> Self {
+        Self { mode, query: String::new(), layout_content_data: EditorWindowLayoutContentData::default(), }
     }
 }
