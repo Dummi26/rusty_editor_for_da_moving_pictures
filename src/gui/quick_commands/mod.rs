@@ -290,6 +290,7 @@ impl QuickCommandsHandler {
     }
 }
 
+
 enum EditingPartAbstract {
     None,
     List { length: usize, },
