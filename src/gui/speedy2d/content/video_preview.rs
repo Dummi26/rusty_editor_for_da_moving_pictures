@@ -159,8 +159,8 @@ impl VideoPreview {
         let progress_bar_width = progress_bar_width * position.2;
         let progress_bar_line_y = position.1 + position.3 * 0.97;
         let progress_bar_pos_x = position.0 + progress_bar_space_on_side + progress_bar_width * self.progress as f32;
-        graphics.draw_line(Vector2::new(position.0 + progress_bar_space_on_side, progress_bar_line_y), Vector2::new(progress_bar_pos_x, progress_bar_line_y), 1.0, Color::CYAN);
-        graphics.draw_line(Vector2::new(progress_bar_pos_x, progress_bar_line_y), Vector2::new(position.0 + progress_bar_space_on_side + progress_bar_width, progress_bar_line_y), 1.0, Color::BLUE);
+        graphics.draw_line(Vector2::new(position.0 + progress_bar_space_on_side, progress_bar_line_y), Vector2::new(progress_bar_pos_x, progress_bar_line_y), visibility, Color::CYAN);
+        graphics.draw_line(Vector2::new(progress_bar_pos_x, progress_bar_line_y), Vector2::new(position.0 + progress_bar_space_on_side + progress_bar_width, progress_bar_line_y), visibility, Color::BLUE);
     }
 }
 impl EditorWindowLayoutContentTrait for VideoPreview {
@@ -195,32 +195,32 @@ impl EditorWindowLayoutContentTrait for VideoPreview {
         match &draw_opts.draw_mode {
             EditorWindowLayoutContentDrawMode::Static(mode) => match mode {
                 EditorWindowLayoutContentSDrawMode::Normal => {
-                    self.draw_type_normal(graphics, position, 1.0);
+                    self.draw_type_normal(graphics, position, draw_opts.visibility);
                 },
                 EditorWindowLayoutContentSDrawMode::TypePreview { moving } => {
-                    self.draw_type_preview(if *moving { 1.0 } else { 0.0 }, 1.0, graphics, position)
+                    self.draw_type_preview(if *moving { 1.0 } else { 0.0 }, draw_opts.visibility, graphics, position)
                 },
             },
             EditorWindowLayoutContentDrawMode::Transition { modes, prog } => {
                 match modes {
                     [EditorWindowLayoutContentSDrawMode::Normal, EditorWindowLayoutContentSDrawMode::Normal] => {
-                        self.draw_type_normal(graphics, position, 1.0);
+                        self.draw_type_normal(graphics, position, draw_opts.visibility);
                     },
                     [EditorWindowLayoutContentSDrawMode::Normal, EditorWindowLayoutContentSDrawMode::TypePreview { moving }] => {
-                        self.draw_type_normal(graphics, position, 1.0 - prog);
-                        self.draw_type_preview(if *moving { 1.0 } else { 0.0 }, *prog, graphics, position);
+                        self.draw_type_normal(graphics, position, (1.0 - prog) * draw_opts.visibility);
+                        self.draw_type_preview(if *moving { 1.0 } else { 0.0 }, prog * draw_opts.visibility, graphics, position);
                     },
                     [EditorWindowLayoutContentSDrawMode::TypePreview { moving }, EditorWindowLayoutContentSDrawMode::Normal] => {
-                        self.draw_type_normal(graphics, position, *prog);
-                        self.draw_type_preview(if *moving { 1.0 } else { 0.0 }, 1.0 - prog, graphics, position);
+                        self.draw_type_normal(graphics, position, prog * draw_opts.visibility);
+                        self.draw_type_preview(if *moving { 1.0 } else { 0.0 }, (1.0 - prog) * draw_opts.visibility, graphics, position);
                     },
                     [EditorWindowLayoutContentSDrawMode::TypePreview { moving: moving_old, }, EditorWindowLayoutContentSDrawMode::TypePreview { moving: moving_new, }] => {
                         if *moving_old == *moving_new {
-                            self.draw_type_preview(if *moving_new { 1.0 } else { 0.0 }, 1.0, graphics, position)
+                            self.draw_type_preview(if *moving_new { 1.0 } else { 0.0 }, draw_opts.visibility, graphics, position)
                         } else if *moving_new {
-                            self.draw_type_preview(*prog, 1.0, graphics, position)
+                            self.draw_type_preview(*prog, draw_opts.visibility, graphics, position)
                         } else {
-                            self.draw_type_preview(1.0 - prog, 1.0, graphics, position)
+                            self.draw_type_preview(1.0 - prog, draw_opts.visibility, graphics, position)
                         }
                     },
                 }
@@ -228,7 +228,7 @@ impl EditorWindowLayoutContentTrait for VideoPreview {
         }
     }
 
-    fn handle_input_custom(&mut self, draw_opts: &mut crate::gui::speedy2d::layout::EditorWindowLayoutContentDrawOptions, input: &mut crate::gui::speedy2d::layout::UserInput) {
+    fn handle_input_custom(&mut self, _draw_opts: &mut crate::gui::speedy2d::layout::EditorWindowLayoutContentDrawOptions, input: &mut crate::gui::speedy2d::layout::UserInput) {
         match &input.owned.action {
             InputAction::None => (),
             InputAction::Mouse(action) => match action {

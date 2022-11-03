@@ -24,6 +24,7 @@ impl EditorWindowHandler {
 
 impl RequestActions {
     fn handle_request_(&mut self, content: &mut EditorWindowLayoutContent) {
+        // println!("Handle Request: {}", content.as_window_title());
         for child in content.get_children() {
             self.handle_request_(child);
         };
@@ -93,6 +94,8 @@ impl RequestActions {
                             Clz::error_details("Index was "), Clz::error_cause(format!("{}", index).as_str()), Clz::error_details("."),
                         );
                     };
+                } else {
+                    println!("{}", Clz::undecided("Attempted to apply some changes to a video part, but no part is selected for editing."));
                 },
                 EditorWindowLayoutRequest::AppliedChangesToVideo => todo!(),
             };

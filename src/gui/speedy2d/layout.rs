@@ -36,6 +36,11 @@ pub struct EditorWindowLayoutContentDrawOptions {
     pub my_size_in_pixels: (f32, f32),
     pub assets_manager: AssetsManager,
     pub draw_mode: EditorWindowLayoutContentDrawMode,
+    pub general_visibility: f32,
+    pub visibility_factors: (f32, ()/* this is only here so the compiler accepts my tuple */),
+    pub visibility: f32,
+}
+impl EditorWindowLayoutContentDrawOptions {
 }
 #[derive(Clone)]
 pub enum EditorWindowLayoutContentDrawMode {
@@ -82,7 +87,7 @@ impl<'a> UserInput<'a> {
     pub fn new(owned: UserInputOwned<'a>, clonable: UserInputClonable, custom_actions_now: Option<&'a Vec<CustomDrawActions>>, custom_actions_next: &'a mut Vec<CustomDrawActions>) -> UserInput<'a> {
         Self { owned, clonable, custom_actions_now, custom_actions_next, }
     }
-    /// Grants mutable access to the custom actions for the NEXT call to draw. Other than get_custom_actions, this does not return None in non-draw calls. Anything added with this method will be accessible via get_custom_actions only in the NEXT draw event (not this one!)
+    /// Grants mutable access to the custom actions for the NEXT call to draw. Where get_custom_actions would return None (in non-draw calls), this STILL WORKS. Anything added with this method will be accessible via get_custom_actions only in the NEXT draw event (not this one!)
     pub fn add_custom_action(&mut self, action: CustomDrawActions) {
         self.custom_actions_next.push(action);
     }

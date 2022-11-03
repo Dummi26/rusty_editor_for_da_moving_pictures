@@ -105,14 +105,14 @@ impl EditorWindowLayoutContentTrait for Half {
             graphics.draw_line(
                 Vector2::new(position.0 as f32, y),
                 Vector2::new((position.0 + position.2) as f32, y),
-                1.0, Color::from_rgba(1.0, 1.0, 1.0, 1.0),
+                1.0, Color::from_rgba(1.0, 1.0, 1.0, draw_opts.visibility),
             );
             if handle_size > 0.0 {
                 let y = y + handle_size;
                 graphics.draw_line(
                     Vector2::new(position.0 as f32, y),
                     Vector2::new((position.0 + position.2) as f32, y),
-                    1.0, Color::from_rgba(1.0, 1.0, 1.0, 1.0),
+                    1.0, Color::from_rgba(1.0, 1.0, 1.0, draw_opts.visibility),
                 );
             };
         } else {
@@ -120,10 +120,11 @@ impl EditorWindowLayoutContentTrait for Half {
             graphics.draw_line(
                 Vector2::new(x, position.1 as f32),
                 Vector2::new(x , (position.1 + position.3) as f32),
-                1.0, Color::from_rgba(1.0, 1.0, 1.0, 1.0),
+                1.0, Color::from_rgba(1.0, 1.0, 1.0, draw_opts.visibility),
             );
         };
     }
+
     fn handle_input_custom(&mut self, draw_opts: &mut crate::gui::speedy2d::layout::EditorWindowLayoutContentDrawOptions, input: &mut crate::gui::speedy2d::layout::UserInput) {
         {
             match draw_opts.draw_mode {
@@ -132,16 +133,20 @@ impl EditorWindowLayoutContentTrait for Half {
                         InputAction::None | InputAction::Keyboard(_) => (),
                         InputAction::Mouse(action) => match action {
                             MouseAction::ButtonDown(btn) => match btn {
-                                MouseButton::Left => {
+                                MouseButton::Left |
+                                MouseButton::Right => {
                                     let max_dist_for_horizontal_mouse = 0.02;
                                     if self.vertical {
                                         if input.clonable.mouse_pos.0 >= -max_dist_for_horizontal_mouse && input.clonable.mouse_pos.0 <= 1.0 + max_dist_for_horizontal_mouse {
-                                            let (_handle_size, handle_size_rel) = self.get_handle_size_draw_mode(&draw_opts);
+                                            // let (_handle_size, handle_size_rel) = self.get_handle_size_draw_mode(&draw_opts);
                                             let top_bar_info = self.get_top_bar_infos(draw_opts);
                                             let mouse_split_val = input.clonable.mouse_pos.1;
                                             let mouse_split_diff = mouse_split_val - self.get_split_with_top_bars(top_bar_info, 0.0);
                                             if mouse_split_diff.abs() < self.get_handle_size_draw_mode(draw_opts).1 {
-                                                self.set_split_with_top_bars(mouse_split_val, top_bar_info, handle_size_rel);
+                                                if *btn == MouseButton::Right {
+                                                    self.vertical = !self.vertical;
+                                                    self.set_split(0.5);
+                                                }
                                                 self.mouse_dragging_split_bar = true;
                                             };
                                         };
@@ -150,7 +155,10 @@ impl EditorWindowLayoutContentTrait for Half {
                                             let mouse_split_val = input.clonable.mouse_pos.0;
                                             let mouse_split_diff = mouse_split_val - self.split;
                                             if mouse_split_diff.abs() < max_dist_for_horizontal_mouse {
-                                                self.set_split(mouse_split_val);
+                                                if *btn == MouseButton::Right {
+                                                    self.vertical = !self.vertical;
+                                                    self.set_split(0.5);
+                                                }
                                                 self.mouse_dragging_split_bar = true;
                                             };
                                         };
@@ -159,7 +167,8 @@ impl EditorWindowLayoutContentTrait for Half {
                                 _ => (),
                             },
                             MouseAction::ButtonUp(btn) => match btn {
-                                MouseButton::Left => self.mouse_dragging_split_bar = false,
+                                MouseButton::Left |
+                                MouseButton::Right => self.mouse_dragging_split_bar = false,
                                 _ => (),
                             },
                             MouseAction::Moved => {

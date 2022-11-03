@@ -360,6 +360,7 @@ pub enum VideoTypeChanges_List {
     Swap(usize, usize),
     Move(usize, usize),
     Insert(usize, Video),
+    Push(Video),
     Change(usize, VideoChanges),
     Replace(usize, Video),
     Remove(usize),
@@ -400,6 +401,7 @@ impl Content for VideoType {
                             VideoTypeChanges_List::Swap(a, b) => { vt.swap(a, b); },
                             VideoTypeChanges_List::Move(a, b) => { let v = vt.remove(b); vt.insert(a, v); }
                             VideoTypeChanges_List::Insert(index, new_val) => { vt.insert(index, new_val); },
+                            VideoTypeChanges_List::Push(new_val) => { vt.push(new_val); },
                             VideoTypeChanges_List::Change(index, changes) => { let vid = vt.get_mut(index).unwrap(); vid.apply_changes(); vid.as_content_changes = changes; vid.apply_changes(); },
                             VideoTypeChanges_List::Replace(index, new_val) => *vt.get_mut(index).unwrap() = new_val,
                             VideoTypeChanges_List::Remove(index) => { vt.remove(index); },

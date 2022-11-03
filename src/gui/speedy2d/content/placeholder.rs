@@ -20,23 +20,23 @@ impl EditorWindowLayoutContentTrait for Placeholder {
         match &draw_opts.draw_mode.clone() /* TODO: Somehow don't clon? (same problem in tree view) */ {
             crate::gui::speedy2d::EditorWindowLayoutContentDrawMode::Static(mode) => {
                 match mode {
-                    crate::gui::speedy2d::layout::EditorWindowLayoutContentSDrawMode::Normal => self.draw_normal(1.0, graphics, position),
-                    crate::gui::speedy2d::layout::EditorWindowLayoutContentSDrawMode::TypePreview { moving } => self.draw_type_preview(1.0, if *moving { 1.0 } else { 0.0 }, draw_opts, graphics, position),
+                    crate::gui::speedy2d::layout::EditorWindowLayoutContentSDrawMode::Normal => self.draw_normal(draw_opts.visibility, graphics, position),
+                    crate::gui::speedy2d::layout::EditorWindowLayoutContentSDrawMode::TypePreview { moving } => self.draw_type_preview(draw_opts.visibility, if *moving { 1.0 } else { 0.0 }, draw_opts, graphics, position),
                 }
             },
             crate::gui::speedy2d::EditorWindowLayoutContentDrawMode::Transition { modes, prog, } => {
                 match modes {
                     [crate::gui::speedy2d::layout::EditorWindowLayoutContentSDrawMode::Normal, crate::gui::speedy2d::layout::EditorWindowLayoutContentSDrawMode::Normal] => self.draw_normal(1.0, graphics, position),
                     [crate::gui::speedy2d::layout::EditorWindowLayoutContentSDrawMode::Normal, crate::gui::speedy2d::layout::EditorWindowLayoutContentSDrawMode::TypePreview { moving }] => {
-                        self.draw_normal(1.0 - prog, graphics, position);
-                        self.draw_type_preview(*prog, if *moving { 1.0 } else { 0.0 }, draw_opts, graphics, position);
+                        self.draw_normal((1.0 - prog) * draw_opts.visibility, graphics, position);
+                        self.draw_type_preview(prog * draw_opts.visibility, if *moving { 1.0 } else { 0.0 }, draw_opts, graphics, position);
                     },
                     [crate::gui::speedy2d::layout::EditorWindowLayoutContentSDrawMode::TypePreview { moving }, crate::gui::speedy2d::layout::EditorWindowLayoutContentSDrawMode::Normal] => {
-                        self.draw_type_preview(1.0 - prog, if *moving { 1.0 } else { 0.0 }, draw_opts, graphics, position);
-                        self.draw_normal(*prog, graphics, position);
+                        self.draw_type_preview((1.0 - prog) * draw_opts.visibility, if *moving { 1.0 } else { 0.0 }, draw_opts, graphics, position);
+                        self.draw_normal(prog * draw_opts.visibility, graphics, position);
                     },
                     [crate::gui::speedy2d::layout::EditorWindowLayoutContentSDrawMode::TypePreview { moving: moving_old }, crate::gui::speedy2d::layout::EditorWindowLayoutContentSDrawMode::TypePreview { moving: moving_new }] => {
-                        self.draw_type_preview(1.0, if !moving_old && *moving_new { *prog } else if *moving_old && !moving_new { 1.0 - prog } else if *moving_old && *moving_new { 1.0 } else { 0.0 }, draw_opts, graphics, position);
+                        self.draw_type_preview(draw_opts.visibility, if !moving_old && *moving_new { *prog } else if *moving_old && !moving_new { 1.0 - prog } else if *moving_old && *moving_new { 1.0 } else { 0.0 }, draw_opts, graphics, position);
                     },
                 }
             },

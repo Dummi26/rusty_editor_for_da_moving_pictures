@@ -6,7 +6,7 @@ mod request;
 pub mod content;
 pub mod content_list;
 
-use crate::{cli::Clz, project::Project, files, gui::speedy2d::layout::{EditorWindowLayoutContentSDrawMode, EditorWindowLayoutContentTrait}, assets::AssetsManager, video::{VideoChanges, Video}};
+use crate::{cli::Clz, project::Project, files, gui::speedy2d::layout::{EditorWindowLayoutContentSDrawMode, EditorWindowLayoutContentTrait}, assets::AssetsManager};
 use speedy2d::{window::{WindowHandler, VirtualKeyCode}, color::Color};
 
 use self::{content_list::{EditorWindowLayoutContent, EditorWindowLayoutContentEnum}, layout::{EditorWindowLayoutContentDrawOptions, EditorWindowLayoutContentDrawMode, CustomDrawActions}, editor_window_settings::EditorWindowSettings};
@@ -33,12 +33,13 @@ struct EditorWindowHandler {
     size: (u32, u32),
     resized: bool,
     project: Project,
-    
+
     settings: EditorWindowSettings,
 
     draw_opts: EditorWindowLayoutContentDrawOptions,
     draw_mode: EditorWindowHandlerDrawMode,
-    
+    gui_visibility: Option<(std::time::Instant, fn(&std::time::Instant) -> (f32, bool))>,
+
     dragged_window: Option<(EditorWindowLayoutContent, (f32, f32), (f32, f32))>,
     edited_part: Option<u32>,
     qvidrunner_state: (f32, bool, Option<Instant>, Duration),
@@ -150,9 +151,11 @@ impl EditorWindowHandler {
         let mut assets_manager = AssetsManager::default();
         assets_manager.assets_path = args.assets_path.clone();
 
+        let now = Instant::now();
+
         Self {
-            creation_time: Instant::now(),
-            start_time: Instant::now(),
+            creation_time: now.clone(),
+            start_time: now.clone(),
             size: (0, 0),
             resized: false,
 
@@ -164,9 +167,17 @@ impl EditorWindowHandler {
                 my_size_in_pixels: (0.0, 0.0),
                 assets_manager,
                 draw_mode: EditorWindowLayoutContentDrawMode::Static(EditorWindowLayoutContentSDrawMode::Normal),
+                general_visibility: 0.0,
+                visibility_factors: (1.0, ()),
+                visibility: 0.0,
             },
             draw_mode: EditorWindowHandlerDrawMode::Static(EditorWindowLayoutContentSDrawMode::Normal),
-            
+            gui_visibility: Some((now, |t| {
+                let elapsed = t.elapsed().as_secs_f32();
+                if elapsed >= 1.0 { (1.0, true)
+                } else { (0.5 - (elapsed * std::f32::consts::PI).cos() / 2.0, false) }
+            })),
+
             dragged_window: None,
             edited_part: None,
             qvidrunner_state: (0.1, false, None, Duration::from_secs_f64(0.25)),
@@ -277,17 +288,22 @@ impl WindowHandler for EditorWindowHandler {
         self.draw_opts.render_canvas_size = self.size.clone();
         self.draw_opts.my_size_in_pixels = (self.size.0 as f32, self.size.1 as f32);
         self.draw_opts.draw_mode = self.draw_mode.get_draw_mode();
-        
+        if let Some((t, f)) = &self.gui_visibility {
+            let (vis, stop) = f(t);
+            self.draw_opts.general_visibility = vis;
+            if stop { self.gui_visibility = None; }
+        }
+
         // Handle requests
-        
+
         self.handle_requests();
-        
+
         // Prepare for drawing (Mandatory)
 
         graphics.clear_screen(Color::BLACK);
-        
+
         // Prepare for drawing (Additional)
-        
+
         if let Some(anim_start_time) = self.qvidrunner_state.2 {
             if let EditorWindowLayoutContentEnum::LayoutHalf(half) = &mut self.layout.c {
                 let progress = anim_start_time.elapsed().as_secs_f32() / self.qvidrunner_state.3.as_secs_f32();
@@ -300,20 +316,24 @@ impl WindowHandler for EditorWindowHandler {
                         p*p*p*p
                     ), false)
                 };
-                if self.qvidrunner_state.1 == true {
+                let open = if self.qvidrunner_state.1 == true {
                     half.set_split(progress * self.qvidrunner_state.0);
+                    progress
                 } else {
-                    half.set_split((1.0 - progress) * self.qvidrunner_state.0);
+                    let open = 1.0 - progress;
+                    half.set_split(open * self.qvidrunner_state.0);
                     if last {
                         self.layout = half.get_children()[1].take();
                     };
-                }
+                    open
+                };
+                self.draw_opts.visibility_factors.0 = 1.0 - 0.75 * open;
             } else {
-                
             }
         }
-        
-        
+
+        self.draw_opts.visibility = self.draw_opts.general_visibility * self.draw_opts.visibility_factors.0;
+
         // Draw (custom)
 
         let custom_actions = std::mem::replace(&mut self.custom_actions, Vec::new());
@@ -344,7 +364,7 @@ impl WindowHandler for EditorWindowHandler {
             );
             dragged_window.draw_onto(&mut self.draw_opts, graphics, &position, &mut input);
         };
-        
+
         // Reset stuff
 
         self.resized = false;
@@ -464,7 +484,7 @@ impl WindowHandler for EditorWindowHandler {
                 None => { self.keyboard_down_buttons_virtualkeycode.insert(vkc, 0); },
             };
         };
-        
+
         self.layout.handle_input(&mut self.draw_opts, &mut layout::UserInput::new_no_actions(
             layout::UserInputOwned {
                 action: layout::InputAction::Keyboard(layout::KeyboardAction::Pressed(scancode, virtual_key_code)),
@@ -515,12 +535,16 @@ impl WindowHandler for EditorWindowHandler {
                 },
                 VirtualKeyCode::Space => {
                     if self.keyboard_modifiers_state.ctrl() {
+                        println!("Edited part: {:?}", self.edited_part);
                         if self.qvidrunner_state.1 == false {
                             self.qvidrunner_state.1 = true;
                             let layout = self.layout.take();
                             self.layout.replace(
                                 content::layout::half::Half::new([
-                                    content::special::qvidrunner::QVidRunner::new(content::special::qvidrunner::QVidRunnerMode::Normal).as_enum(),
+                                    content::special::qvidrunner::QVidRunner::new(content::special::qvidrunner::QVidRunnerMode::Normal,
+                                        self.edited_part,
+                                        self.project.vid.get_vid_mutex_arc().clone(),
+                                    ).as_enum(),
                                     layout,
                                 ], true, 0.0).as_enum()
                             );

@@ -108,29 +108,29 @@ impl EditorWindowLayoutContentTrait for VideoPropertiesEditor {
         match &draw_opts.draw_mode.clone() /* TODO: Can you not clone here? */ {
             EditorWindowLayoutContentDrawMode::Static(mode) => match mode {
                 EditorWindowLayoutContentSDrawMode::Normal => {
-                    self.draw_normal(1.0, draw_opts, graphics, position, input);
+                    self.draw_normal(draw_opts.visibility, draw_opts, graphics, position, input);
                 },
                 EditorWindowLayoutContentSDrawMode::TypePreview { moving } => {
-                    draw_type_preview(1.0, if *moving { 1.0 } else { 0.5 }, graphics, position);
+                    draw_type_preview(draw_opts.visibility, if *moving { 1.0 } else { 0.5 }, graphics, position);
                 },
             },
             EditorWindowLayoutContentDrawMode::Transition { modes, prog } => match modes {
                 [EditorWindowLayoutContentSDrawMode::Normal, EditorWindowLayoutContentSDrawMode::Normal] => {},
                 [EditorWindowLayoutContentSDrawMode::Normal, EditorWindowLayoutContentSDrawMode::TypePreview { moving }] => {
-                    self.draw_normal(1.0 - prog, draw_opts, graphics, position, input);
-                    draw_type_preview(*prog, if *moving { 1.0 } else { 0.0 }, graphics, position);
+                    self.draw_normal((1.0 - prog) * draw_opts.visibility, draw_opts, graphics, position, input);
+                    draw_type_preview(prog * draw_opts.visibility, if *moving { 1.0 } else { 0.0 }, graphics, position);
                 },
                 [EditorWindowLayoutContentSDrawMode::TypePreview { moving }, EditorWindowLayoutContentSDrawMode::Normal] => {
-                    self.draw_normal(*prog, draw_opts, graphics, position, input);
-                    draw_type_preview(1.0 - prog, if *moving { 1.0 } else { 0.0 }, graphics, position);
+                    self.draw_normal(prog * draw_opts.visibility, draw_opts, graphics, position, input);
+                    draw_type_preview((1.0 - prog) * draw_opts.visibility, if *moving { 1.0 } else { 0.0 }, graphics, position);
                 },
                 [EditorWindowLayoutContentSDrawMode::TypePreview { moving: moving_old, }, EditorWindowLayoutContentSDrawMode::TypePreview { moving: moving_new, }] => {
                     if *moving_old == *moving_new {
-                        draw_type_preview(1.0, if *moving_new { 1.0 } else { 0.0 }, graphics, position)
+                        draw_type_preview(draw_opts.visibility, if *moving_new { 1.0 } else { 0.0 }, graphics, position)
                     } else if *moving_new {
-                        draw_type_preview(1.0, *prog, graphics, position)
+                        draw_type_preview(draw_opts.visibility, *prog, graphics, position)
                     } else {
-                        draw_type_preview(1.0, 1.0 - prog, graphics, position)
+                        draw_type_preview(draw_opts.visibility, 1.0 - prog, graphics, position)
                     }
                 },
             },
