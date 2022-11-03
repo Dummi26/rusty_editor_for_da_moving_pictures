@@ -30,6 +30,7 @@ https://user-images.githubusercontent.com/67615357/199803303-e50295f0-25a3-4acd-
 (This is still very experimental)
 
 Ctrl+Space: QVidRunner (command bar, also happens to be useful for deleting stuff from the gui, although this is technically a bug)
+(Shift+)Tab: Navigate through QVidRunner's suggestions
 
 Esc: GUI layout editing mode (this is still very buggy - left click and hold to resize splits, right click to change vertical/horizontal)
 

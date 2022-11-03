@@ -11,3 +11,4 @@
   7 - Top content in vertical Half split has some issues with mouse position.
   6 - When placing a dragged window on a placeholder by clicking (not just releasing), the placeholder might add a "replace me with x" request, which will consume the dragged window. Temp user fix: Click on one entry in the placeholder, move the mouse to another before releasing.
 ! 4 - Video Previews CAN BE CONSUMED, BUT CAN'T BE READDED!
+  1 - Shift+Tab is not recognized as a Tab character, which prevents QVidRunner from working as well as it should. The issue is in src/useful.rs.
