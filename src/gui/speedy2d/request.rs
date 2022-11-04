@@ -127,8 +127,7 @@ impl RequestActions {
             container.custom_actions.push(super::layout::CustomDrawActions::SetEditingTo(container.edited_part));
         };
         if self.edited_part_requires_update {
-            container.custom_actions.push(super::layout::CustomDrawActions::SetVideoPreviewActive(false));
-            container.custom_actions.push(super::layout::CustomDrawActions::SetVideoPreviewActive(true));
+            container.custom_actions.push(super::layout::CustomDrawActions::ChangedVideo);
         };
     }
 }

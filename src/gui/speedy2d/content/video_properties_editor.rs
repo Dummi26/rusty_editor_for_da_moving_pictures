@@ -150,6 +150,11 @@ struct EtGeneral {
             },
         };
     }
+    fn update(&mut self, supr: &mut VideoPropertiesEditor, ud: ETUpdate) {
+        match ud {
+            ETUpdate::VideoWasUpdated(_) => (),
+        }
+    }
 }
 
 struct EtTime {
@@ -205,6 +210,14 @@ struct EtTime {
             _ => (),
         }
     }
+    fn update(&mut self, supr: &mut VideoPropertiesEditor, ud: ETUpdate) {
+        match ud {
+            ETUpdate::VideoWasUpdated(vid) => {
+                self.start = vid.set_start_frame;
+                self.end = self.start + vid.set_length;
+            },
+        }
+    }
 }
 
 struct EtChangeType {
@@ -221,6 +234,11 @@ struct EtChangeType {
     fn draw(&mut self, supr: &mut VideoPropertiesEditor, draw_opts: &mut crate::gui::speedy2d::layout::EditorWindowLayoutContentDrawOptions, graphics: &mut speedy2d::Graphics2D, position: &(f32, f32, f32, f32), input: &mut crate::gui::speedy2d::layout::UserInput) {
     }
     fn handle_input(&mut self, supr: &mut VideoPropertiesEditor, draw_opts: &mut crate::gui::speedy2d::layout::EditorWindowLayoutContentDrawOptions, input: &mut crate::gui::speedy2d::layout::UserInput) {
+    }
+    fn update(&mut self, supr: &mut VideoPropertiesEditor, ud: ETUpdate) {
+        match ud {
+            ETUpdate::VideoWasUpdated(_) => (),
+        }
     }
 }
 
@@ -289,6 +307,11 @@ struct EtCurve {
     }
     fn handle_input(&mut self, supr: &mut VideoPropertiesEditor, draw_opts: &mut crate::gui::speedy2d::layout::EditorWindowLayoutContentDrawOptions, input: &mut crate::gui::speedy2d::layout::UserInput) {
     }
+    fn update(&mut self, supr: &mut VideoPropertiesEditor, ud: ETUpdate) {
+        match ud {
+            ETUpdate::VideoWasUpdated(vid) => () /* TODO */,
+        }
+    }
 }
 
 struct EtListAdd {
@@ -354,6 +377,11 @@ struct EtListAdd {
             },
         };
     }
+    fn update(&mut self, supr: &mut VideoPropertiesEditor, ud: ETUpdate) {
+        match ud {
+            ETUpdate::VideoWasUpdated(_) => (),
+        }
+    }
 }
 
 struct EtPath {
@@ -361,15 +389,26 @@ struct EtPath {
     pub path: PathBuf,
     ends_in_path_sep: bool,
 } impl EtPath {
-    pub fn new(path: PathBuf) -> Self {
+    pub fn new_vid(vid: &Video) -> Self {
+        let path = Self::get_path(vid);
+        Self { og_path: path.clone(), path, ends_in_path_sep: false, }
+    }
+    pub fn new_path(path: PathBuf) -> Self {
         Self {
             og_path: path.clone(),
             path,
             ends_in_path_sep: false,
         }
     }
+    fn get_path(vid: &Video) -> PathBuf {
+        match &vid.video.vt {
+            VideoTypeEnum::Image(img) => img.path().clone(),
+            VideoTypeEnum::Raw(vid) => vid.get_dir().clone(),
+            _ => PathBuf::from("!! invalid video type !!"),
+        }
+    }
 } impl ExtraTabsInfo for EtPath {
-    fn title(&self) -> StringTypeForExtraTabTitle { "PLACEHOLDER".into() }
+    fn title(&self) -> StringTypeForExtraTabTitle { "edit path".into() }
     fn draw_icon(&mut self, vis: f32, hovered: f32, selected: f32, graphics: &mut speedy2d::Graphics2D, position: &(f32, f32, f32, f32), shared_data: &SharedEtData) {
         graphics.draw_line(Vector2 { x: position.0, y: position.1 }, Vector2 { x: position.0 + position.2, y: position.1 + position.3 }, 1.0, shared_data.unified_color);
     }
@@ -456,6 +495,11 @@ struct EtPath {
             },
         };
     }
+    fn update(&mut self, supr: &mut VideoPropertiesEditor, ud: ETUpdate) {
+        match ud {
+            ETUpdate::VideoWasUpdated(vid) => self.og_path = Self::get_path(vid),
+        }
+    }
 }
 
 struct EtPlaceholder {
@@ -469,10 +513,9 @@ struct EtPlaceholder {
     fn draw_icon(&mut self, vis: f32, hovered: f32, selected: f32, graphics: &mut speedy2d::Graphics2D, position: &(f32, f32, f32, f32), shared_data: &SharedEtData) {
         graphics.draw_line(Vector2 { x: position.0, y: position.1 }, Vector2 { x: position.0 + position.2, y: position.1 + position.3 }, 1.0, shared_data.unified_color);
     }
-    fn draw(&mut self, supr: &mut VideoPropertiesEditor, draw_opts: &mut crate::gui::speedy2d::layout::EditorWindowLayoutContentDrawOptions, graphics: &mut speedy2d::Graphics2D, position: &(f32, f32, f32, f32), input: &mut crate::gui::speedy2d::layout::UserInput) {
-    }
-    fn handle_input(&mut self, supr: &mut VideoPropertiesEditor, draw_opts: &mut crate::gui::speedy2d::layout::EditorWindowLayoutContentDrawOptions, input: &mut crate::gui::speedy2d::layout::UserInput) {
-    }
+    fn draw(&mut self, supr: &mut VideoPropertiesEditor, draw_opts: &mut crate::gui::speedy2d::layout::EditorWindowLayoutContentDrawOptions, graphics: &mut speedy2d::Graphics2D, position: &(f32, f32, f32, f32), input: &mut crate::gui::speedy2d::layout::UserInput) {}
+    fn handle_input(&mut self, supr: &mut VideoPropertiesEditor, draw_opts: &mut crate::gui::speedy2d::layout::EditorWindowLayoutContentDrawOptions, input: &mut crate::gui::speedy2d::layout::UserInput) {}
+    fn update(&mut self, supr: &mut VideoPropertiesEditor, ud: ETUpdate) {}
 }
 
 trait ExtraTabsInfo {
@@ -480,6 +523,10 @@ trait ExtraTabsInfo {
     fn draw_icon(&mut self, vis: f32, hovered: f32, selected: f32, graphics: &mut speedy2d::Graphics2D, position: &(f32, f32, f32, f32), shared_data: &SharedEtData);
     fn draw(&mut self, supr: &mut VideoPropertiesEditor, draw_opts: &mut crate::gui::speedy2d::layout::EditorWindowLayoutContentDrawOptions, graphics: &mut speedy2d::Graphics2D, position: &(f32, f32, f32, f32), input: &mut crate::gui::speedy2d::layout::UserInput);
     fn handle_input(&mut self, supr: &mut VideoPropertiesEditor, draw_opts: &mut crate::gui::speedy2d::layout::EditorWindowLayoutContentDrawOptions, input: &mut crate::gui::speedy2d::layout::UserInput);
+    fn update(&mut self, supr: &mut VideoPropertiesEditor, ud: ETUpdate);
+}
+enum ETUpdate<'a> {
+    VideoWasUpdated(&'a Video),
 }
 struct SharedEtData {
     pub unified_color: Color,
@@ -557,9 +604,17 @@ impl EditorWindowLayoutContentTrait for VideoPropertiesEditor {
                                 self.tabs = match &new_vid.video.vt {
                                     VideoTypeEnum::List(_) => vec![Some(Box::new(EtGeneral::new())), Some(Box::new(EtPlaceholder::new()))/*ExtraTabsInfo::ListEdit*/, Some(Box::new(EtListAdd::new()))/*ExtraTabsInfo::ListAdd*/],
                                     VideoTypeEnum::WithEffect(_, _) => vec![Some(Box::new(EtGeneral::new()))],
-                                    VideoTypeEnum::Image(img) => vec![Some(Box::new(EtGeneral::new())), Some(Box::new(EtPath::new(img.path().clone())))/*ExtraTabsInfo::ImagePath(img.path().clone(), false)*/],
+                                    VideoTypeEnum::Image(img) => vec![Some(Box::new(EtGeneral::new())), Some(Box::new(EtPath::new_path(img.path().clone())))/*ExtraTabsInfo::ImagePath(img.path().clone(), false)*/],
                                     VideoTypeEnum::Raw(_) => vec![Some(Box::new(EtGeneral::new()))],
                                 };
+                            } else {
+                                let mut tabs = std::mem::replace(&mut self.tabs, Vec::new());
+                                for tab in tabs.iter_mut() {
+                                    if let Some(tab) = tab {
+                                        tab.update(self, ETUpdate::VideoWasUpdated(&new_vid));
+                                    }
+                                }
+                                self.tabs = tabs;
                             }
                             Some((index.clone(), new_vid))
                         } else {
