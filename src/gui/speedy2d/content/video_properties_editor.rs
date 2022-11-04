@@ -6,6 +6,8 @@ use speedy2d::{dimen::Vector2, color::Color, font::{TextLayout, TextOptions, Tex
 
 use crate::{video::{Video, VideoChanges, VideoTypeEnum, VideoTypeChanges, VideoTypeChanges_List, VideoType}, content::{content::Content, image::ImageChanges}, gui::speedy2d::{layout::{EditorWindowLayoutContentTrait, EditorWindowLayoutContentDrawMode, EditorWindowLayoutContentSDrawMode, EditorWindowLayoutContentData, CustomDrawActions, MouseAction}, content_list::{EditorWindowLayoutContent, EditorWindowLayoutContentEnum}, request::EditorWindowLayoutRequest}, effect::{self, effects::{EffectsEnum, EffectT}}, useful, curve::Curve};
 
+type StringTypeForExtraTabTitle<'a> = std::borrow::Cow<'a, str>;
+
 pub struct VideoPropertiesEditor {
     video: Arc<Mutex<Video>>,
     editing: (Option<(u32, Video)>, Option<Instant>),
@@ -30,17 +32,17 @@ struct AnyTabInfo {
     hovered_changed: Option<Instant>,
 }
 
-pub enum ExtraTabsInfoEnum {
-    General,
-    StartAndLength(f64, f64),
-    ChangeType,
-    Curve { name: String, id: u32, write_changes: fn(&mut Video, Curve), curve: Curve, },
-
-    ListEdit,
-    ListAdd,
-
-    ImagePath(PathBuf, bool),
-}
+// pub enum ExtraTabsInfoEnum {
+//     General,
+//     StartAndLength(f64, f64),
+//     ChangeType,
+//     Curve { name: String, id: u32, write_changes: fn(&mut Video, Curve), curve: Curve, },
+// 
+//     ListEdit,
+//     ListAdd,
+// 
+//     ImagePath(PathBuf, bool),
+// }
 
 struct EtGeneral {
 } impl EtGeneral {
@@ -49,7 +51,7 @@ struct EtGeneral {
         }
     }
 } impl ExtraTabsInfo for EtGeneral {
-    fn title(&self) -> &str { "general" }
+    fn title(&self) -> StringTypeForExtraTabTitle { "general".into() }
     fn draw_icon(&mut self, vis: f32, hovered: f32, selected: f32, graphics: &mut speedy2d::Graphics2D, position: &(f32, f32, f32, f32), shared_data: &SharedEtData) {
         graphics.draw_line(Vector2 { x: position.0 + (hovered + selected).min(1.0) * position.2, y: position.1 }, Vector2 { x: position.0 + position.2 - selected * position.2, y: position.1 + position.3 }, 1.0, shared_data.unified_color);
     }
@@ -161,7 +163,7 @@ struct EtTime {
         }
     }
 } impl ExtraTabsInfo for EtTime {
-    fn title(&self) -> &str { "edit start and end time" }
+    fn title(&self) -> StringTypeForExtraTabTitle { "edit start and end time".into() }
     fn draw_icon(&mut self, vis: f32, hovered: f32, selected: f32, graphics: &mut speedy2d::Graphics2D, position: &(f32, f32, f32, f32), shared_data: &SharedEtData) {
         graphics.draw_line(Vector2 { x: position.0, y: position.1 }, Vector2 { x: position.0 + position.2, y: position.1 + position.3 }, 1.0, shared_data.unified_color);
     }
@@ -212,7 +214,7 @@ struct EtChangeType {
         }
     }
 } impl ExtraTabsInfo for EtChangeType {
-    fn title(&self) -> &str { "change type" }
+    fn title(&self) -> StringTypeForExtraTabTitle { "change type".into() }
     fn draw_icon(&mut self, vis: f32, hovered: f32, selected: f32, graphics: &mut speedy2d::Graphics2D, position: &(f32, f32, f32, f32), shared_data: &SharedEtData) {
         graphics.draw_line(Vector2 { x: position.0, y: position.1 }, Vector2 { x: position.0 + position.2, y: position.1 + position.3 }, 1.0, shared_data.unified_color);
     }
@@ -237,7 +239,7 @@ struct EtCurve {
         }
     }
 } impl ExtraTabsInfo for EtCurve {
-    fn title(&self) -> &str { "edit ?-curve" }
+    fn title(&self) -> StringTypeForExtraTabTitle { format!("edit {}-curve", self.name).into() }
     fn draw_icon(&mut self, vis: f32, hovered: f32, selected: f32, graphics: &mut speedy2d::Graphics2D, position: &(f32, f32, f32, f32), shared_data: &SharedEtData) {
         graphics.draw_line(Vector2 { x: position.0, y: position.1 }, Vector2 { x: position.0 + position.2, y: position.1 + position.3 }, 1.0, shared_data.unified_color);
     }
@@ -296,7 +298,7 @@ struct EtPlaceholder {
         }
     }
 } impl ExtraTabsInfo for EtPlaceholder {
-    fn title(&self) -> &str { "PLACEHOLDER" }
+    fn title(&self) -> StringTypeForExtraTabTitle { "PLACEHOLDER".into() }
     fn draw_icon(&mut self, vis: f32, hovered: f32, selected: f32, graphics: &mut speedy2d::Graphics2D, position: &(f32, f32, f32, f32), shared_data: &SharedEtData) {
         graphics.draw_line(Vector2 { x: position.0, y: position.1 }, Vector2 { x: position.0 + position.2, y: position.1 + position.3 }, 1.0, shared_data.unified_color);
     }
@@ -306,8 +308,8 @@ struct EtPlaceholder {
     }
 }
 
-pub trait ExtraTabsInfo {
-    fn title(&self) -> &str;
+trait ExtraTabsInfo {
+    fn title(&self) -> StringTypeForExtraTabTitle;
     fn draw_icon(&mut self, vis: f32, hovered: f32, selected: f32, graphics: &mut speedy2d::Graphics2D, position: &(f32, f32, f32, f32), shared_data: &SharedEtData);
     fn draw(&mut self, supr: &mut VideoPropertiesEditor, draw_opts: &mut crate::gui::speedy2d::layout::EditorWindowLayoutContentDrawOptions, graphics: &mut speedy2d::Graphics2D, position: &(f32, f32, f32, f32), input: &mut crate::gui::speedy2d::layout::UserInput);
     fn handle_input(&mut self, supr: &mut VideoPropertiesEditor, draw_opts: &mut crate::gui::speedy2d::layout::EditorWindowLayoutContentDrawOptions, input: &mut crate::gui::speedy2d::layout::UserInput);
