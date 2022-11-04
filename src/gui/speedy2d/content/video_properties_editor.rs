@@ -1,5 +1,5 @@
 use core::num;
-use std::{sync::{Arc, Mutex}, time::{Instant, Duration}, path::{PathBuf, Path}};
+use std::{borrow::Cow, sync::{Arc, Mutex}, time::{Instant, Duration}, path::{PathBuf, Path}};
 
 use egui::TextBuffer;
 use speedy2d::{dimen::Vector2, color::Color, font::{TextLayout, TextOptions, TextAlignment}, shape::Rectangle};
@@ -19,7 +19,7 @@ pub struct VideoPropertiesEditor {
     has_keyboard_focus: bool,
 
     tab: (usize, Option<(usize, Instant)>),
-    tabs: Vec<ExtraTabsInfo>,
+    tabs: Vec<Option<Box<dyn ExtraTabsInfo>>>,
     tabs_info: Vec<AnyTabInfo>,
 
     layout_content_data: EditorWindowLayoutContentData,
@@ -29,7 +29,8 @@ struct AnyTabInfo {
     hovered: bool,
     hovered_changed: Option<Instant>,
 }
-pub enum ExtraTabsInfo {
+
+pub enum ExtraTabsInfoEnum {
     General,
     StartAndLength(f64, f64),
     ChangeType,
@@ -40,6 +41,281 @@ pub enum ExtraTabsInfo {
 
     ImagePath(PathBuf, bool),
 }
+
+struct EtGeneral {
+} impl EtGeneral {
+    pub fn new() -> Self {
+        Self {
+        }
+    }
+} impl ExtraTabsInfo for EtGeneral {
+    fn title(&self) -> Cow<str> { Cow::Borrowed("general") }
+    fn draw_icon(&mut self, vis: f32, hovered: f32, selected: f32, graphics: &mut speedy2d::Graphics2D, position: &(f32, f32, f32, f32), shared_data: &SharedEtData) {
+        graphics.draw_line(Vector2 { x: position.0 + (hovered + selected).min(1.0) * position.2, y: position.1 }, Vector2 { x: position.0 + position.2 - selected * position.2, y: position.1 + position.3 }, 1.0, shared_data.unified_color);
+    }
+    fn draw(&mut self, supr: &mut VideoPropertiesEditor, draw_opts: &mut crate::gui::speedy2d::layout::EditorWindowLayoutContentDrawOptions, graphics: &mut speedy2d::Graphics2D, position: &(f32, f32, f32, f32), input: &mut crate::gui::speedy2d::layout::UserInput) {
+        let vis = draw_opts.visibility_factors.video_properties_editor_tabs;
+        let opts = ["x-position", "y-position", "width", "height", "time", "change type"];
+        let options = opts.len();
+        let h = position.3 / options as f32;
+        for (opt, txt) in opts.into_iter().enumerate() {
+            let y = position.1 + position.3 * opt as f32 / options as f32;
+            graphics.draw_line(Vector2 { x: position.0, y, }, Vector2 { x: position.0 + position.2, y, }, 1.0, Color::from_rgba(1.0, 1.0, 1.0, vis));
+            graphics.draw_text(Vector2 { x: position.0, y: y + 0.25 * h, }, Color::from_rgba(1.0, 1.0, 1.0, vis), &draw_opts.assets_manager.get_default_font().layout_text(txt, h * 0.5, TextOptions::new()));
+        };
+    }
+    fn handle_input(&mut self, supr: &mut VideoPropertiesEditor, draw_opts: &mut crate::gui::speedy2d::layout::EditorWindowLayoutContentDrawOptions, input: &mut crate::gui::speedy2d::layout::UserInput) {
+        match &input.owned.action {
+            crate::gui::speedy2d::layout::InputAction::None |
+            crate::gui::speedy2d::layout::InputAction::Keyboard(_) => (),
+            crate::gui::speedy2d::layout::InputAction::Mouse(action) => match action {
+                MouseAction::Moved => (),
+                MouseAction::ButtonDown(_) => (),
+                MouseAction::ButtonUp(btn) => {
+                    let possibilities = 6;
+                    let mouse_pos = input.clonable.mouse_pos;
+                    let mouse_index = if 0.0 < mouse_pos.0 && mouse_pos.0 < 1.0 && 0.0 < mouse_pos.1 && mouse_pos.1 < 1.0 {
+                        Some(((mouse_pos.1 * possibilities as f32).floor() as usize).min(possibilities - 1))
+                    } else { None };
+                    if let Some(mouse_index) = mouse_index {
+                        match mouse_index {
+                            0 => {
+                                if let Some(index) = VideoPropertiesEditor::get_extra_tabs_index_where(&supr.tabs, |e| false) {
+                                    supr.change_tab_to(index, false);
+                                } else {
+                                    supr.change_tab_to(supr.tabs.len(), false);
+                                    supr.tabs.push(Some(Box::new(EtCurve::new("x".to_string(),
+                                        0, |v, c| { v
+                                        .set_pos.x = c; }, supr.editing.0.as_ref().unwrap().1
+                                        .set_pos.x.clone()))));
+                                };
+                            },
+                            1 => {
+                                if let Some(index) = VideoPropertiesEditor::get_extra_tabs_index_where(&supr.tabs, |e| false) {
+                                    supr.change_tab_to(index, false);
+                                } else {
+                                    supr.change_tab_to(supr.tabs.len(), false);
+                                    supr.tabs.push(Some(Box::new(EtCurve::new("y".to_string(),
+                                        1, |v, c| { v
+                                        .set_pos.y = c; }, supr.editing.0.as_ref().unwrap().1
+                                        .set_pos.y.clone()))));
+                                };
+                            },
+                            2 => {
+                                if let Some(index) = VideoPropertiesEditor::get_extra_tabs_index_where(&supr.tabs, |e| false) {
+                                    supr.change_tab_to(index, false);
+                                } else {
+                                    supr.change_tab_to(supr.tabs.len(), false);
+                                    supr.tabs.push(Some(Box::new(EtCurve::new("width".to_string(),
+                                        2, |v, c| { v
+                                        .set_pos.w = c; }, supr.editing.0.as_ref().unwrap().1
+                                        .set_pos.w.clone()))));
+                                };
+                            },
+                            3 => {
+                                if let Some(index) = VideoPropertiesEditor::get_extra_tabs_index_where(&supr.tabs, |e| false) {
+                                    supr.change_tab_to(index, false);
+                                } else {
+                                    supr.change_tab_to(supr.tabs.len(), false);
+                                    supr.tabs.push(Some(Box::new(EtCurve::new("height".to_string(),
+                                        3, |v, c| { v
+                                        .set_pos.h = c; }, supr.editing.0.as_ref().unwrap().1
+                                        .set_pos.h.clone()))));
+                                };
+                            },
+                            4 => {
+                                if let Some(index) = VideoPropertiesEditor::get_extra_tabs_index_where(&supr.tabs, |e| false) {
+                                    supr.change_tab_to(index, false);
+                                } else {
+                                    supr.change_tab_to(supr.tabs.len(), false);
+                                    let editing = supr.editing.0.as_ref().unwrap();
+                                    supr.tabs.push(Some(Box::new(EtTime::new_len(editing.1.set_start_frame, editing.1.set_length))));
+                                };
+                            },
+                            5 => {
+                                if let Some(index) = VideoPropertiesEditor::get_extra_tabs_index_where(&supr.tabs, |e| false) {
+                                    supr.change_tab_to(index, false);
+                                } else {
+                                    supr.change_tab_to(supr.tabs.len(), false);
+                                    supr.tabs.push(Some(Box::new(EtChangeType::new())));
+                                };
+                            },
+                            _ => (),
+                        };
+                    };
+                },
+                MouseAction::Scroll(_) => (),
+            },
+        };
+    }
+}
+
+struct EtTime {
+    pub start: f64,
+    pub end: f64,
+} impl EtTime {
+    pub fn new_len(start: f64, length: f64) -> Self {
+        Self {
+            start,
+            end: start + length,
+        }
+    }
+} impl ExtraTabsInfo for EtTime {
+    fn title(&self) -> Cow<str> { Cow::Borrowed("edit start and end time") }
+    fn draw_icon(&mut self, vis: f32, hovered: f32, selected: f32, graphics: &mut speedy2d::Graphics2D, position: &(f32, f32, f32, f32), shared_data: &SharedEtData) {
+        graphics.draw_line(Vector2 { x: position.0, y: position.1 }, Vector2 { x: position.0 + position.2, y: position.1 + position.3 }, 1.0, shared_data.unified_color);
+    }
+    fn draw(&mut self, supr: &mut VideoPropertiesEditor, draw_opts: &mut crate::gui::speedy2d::layout::EditorWindowLayoutContentDrawOptions, graphics: &mut speedy2d::Graphics2D, position: &(f32, f32, f32, f32), input: &mut crate::gui::speedy2d::layout::UserInput) {
+        let vis = draw_opts.visibility_factors.video_properties_editor_tabs;
+        let per_item_height = supr.get_height_of_element_abs(draw_opts.my_size_in_pixels.1); // TODO figure out what this is, why it is, and then decide if something needs to be changed
+        let font = draw_opts.assets_manager.get_default_font();
+        let y = position.1 + position.3 * 0.375;
+        let editing_video = &supr.editing.0.as_ref().unwrap().1;
+        graphics.draw_line(Vector2 { x: position.0 + 0.05 * position.2, y, }, Vector2 { x: position.0 + (0.05 + 0.9 * self.start as f32) * position.2, y, }, per_item_height * 0.1, Color::from_rgba(if editing_video.set_start_frame == self.start { 0.5 } else { 1.0 }, 0.5, 0.5, vis));
+        let y = position.1 + position.3 * 0.625;
+        graphics.draw_line(Vector2 { x: position.0 + 0.05 * position.2, y, }, Vector2 { x: position.0 + (0.05 + 0.9 * self.end as f32) * position.2, y, }, per_item_height * 0.1, Color::from_rgba(if editing_video.set_length == self.end - self.start { 0.5 } else { 1.0 }, 0.5, 0.5, vis));
+        let text = font.layout_text(format!("from {}\nto {}", self.start, self.end).as_str(), per_item_height * 0.9, TextOptions::new().with_wrap_to_width(position.2, TextAlignment::Center));
+        graphics.draw_text(Vector2 { x: position.0, y: position.1, }, Color::from_rgba(1.0, 1.0, 1.0, vis), &text);
+        let text = font.layout_text("click to apply", per_item_height * 0.9, TextOptions::new().with_wrap_to_width(position.2, TextAlignment::Center));
+        graphics.draw_text(Vector2 { x: position.0, y: position.1 + position.3 - text.height(), }, Color::from_rgba(1.0, 1.0, 1.0, vis), &text);
+    }
+    fn handle_input(&mut self, supr: &mut VideoPropertiesEditor, draw_opts: &mut crate::gui::speedy2d::layout::EditorWindowLayoutContentDrawOptions, input: &mut crate::gui::speedy2d::layout::UserInput) {
+        let mouse_pos = input.clonable.mouse_pos;
+        match &input.owned.action {
+            crate::gui::speedy2d::layout::InputAction::Mouse(action) => match action {
+                MouseAction::Moved | MouseAction::ButtonUp(speedy2d::window::MouseButton::Left) => {
+                    if input.owned.mouse_down_buttons.contains_key(&speedy2d::window::MouseButton::Left) {
+                        if 0.0 < mouse_pos.0 && mouse_pos.0 < 1.0 && 0.0 < mouse_pos.1 && mouse_pos.1 < 1.0 {
+                            match (mouse_pos.1 * 4.0).floor() as i32 {
+                                0 => {},
+                                1 => self.start = ((mouse_pos.0 as f64 - 0.05) / 0.9).max(0.0).min(self.end),
+                                2 => self.end = ((mouse_pos.0 as f64 - 0.05) / 0.9).max(self.start).min(1.0),
+                                3 => {
+                                    supr.data().requests.push(EditorWindowLayoutRequest::EditingChangesApply(VideoChanges { pos: None, start: Some(self.start), length: Some(self.end - self.start), video: None, }));
+                                },
+                                _ => (),
+                            };
+                        };
+                    };
+                },
+                _ => (),
+            }
+            _ => (),
+        }
+    }
+}
+
+struct EtChangeType {
+} impl EtChangeType {
+    pub fn new() -> Self {
+        Self {
+        }
+    }
+} impl ExtraTabsInfo for EtChangeType {
+    fn title(&self) -> Cow<str> { Cow::Borrowed("change type") }
+    fn draw_icon(&mut self, vis: f32, hovered: f32, selected: f32, graphics: &mut speedy2d::Graphics2D, position: &(f32, f32, f32, f32), shared_data: &SharedEtData) {
+        graphics.draw_line(Vector2 { x: position.0, y: position.1 }, Vector2 { x: position.0 + position.2, y: position.1 + position.3 }, 1.0, shared_data.unified_color);
+    }
+    fn draw(&mut self, supr: &mut VideoPropertiesEditor, draw_opts: &mut crate::gui::speedy2d::layout::EditorWindowLayoutContentDrawOptions, graphics: &mut speedy2d::Graphics2D, position: &(f32, f32, f32, f32), input: &mut crate::gui::speedy2d::layout::UserInput) {
+    }
+    fn handle_input(&mut self, supr: &mut VideoPropertiesEditor, draw_opts: &mut crate::gui::speedy2d::layout::EditorWindowLayoutContentDrawOptions, input: &mut crate::gui::speedy2d::layout::UserInput) {
+    }
+}
+
+struct EtCurve {
+    name: String,
+    id: u32,
+    write_changes: fn(&mut Video, Curve),
+    curve: Curve,
+} impl EtCurve {
+    pub fn new(name: String, id: u32, write_changes: fn(&mut Video, Curve), curve: Curve) -> Self {
+        Self {
+            name,
+            id,
+            write_changes,
+            curve,
+        }
+    }
+} impl ExtraTabsInfo for EtCurve {
+    fn title(&self) -> Cow<str> { Cow::Owned(format!("edit {}-curve", self.title())) }
+    fn draw_icon(&mut self, vis: f32, hovered: f32, selected: f32, graphics: &mut speedy2d::Graphics2D, position: &(f32, f32, f32, f32), shared_data: &SharedEtData) {
+        graphics.draw_line(Vector2 { x: position.0, y: position.1 }, Vector2 { x: position.0 + position.2, y: position.1 + position.3 }, 1.0, shared_data.unified_color);
+    }
+    fn draw(&mut self, supr: &mut VideoPropertiesEditor, draw_opts: &mut crate::gui::speedy2d::layout::EditorWindowLayoutContentDrawOptions, graphics: &mut speedy2d::Graphics2D, position: &(f32, f32, f32, f32), input: &mut crate::gui::speedy2d::layout::UserInput) {
+        let vis = draw_opts.visibility_factors.video_properties_editor_tabs;
+        let diagram_width = position.2.ceil() as _;
+        let diagram_width_minus_one_float = (diagram_width - 1) as f64;
+        let mut values = Vec::with_capacity(diagram_width);
+        let (mut min, mut max) = (0.0, 1.0);
+        for i in 0..diagram_width {
+            let v = self.curve.get_value(i as f64 / diagram_width_minus_one_float);
+            if v > max { max = v; }
+            if v < min { min = v; }
+            values.push(v);
+        }
+        let minmaxdiff = max - min;
+        let mut prev_point = None;
+        { // draw 0.0 and 1.0 lines
+            let left = position.0;
+            let right = position.0 + position.2;
+            let y = position.1;
+            let h = position.3;
+            let y1 = y + h * ((max - 1.0) / minmaxdiff) as f32;
+            let y2 = y + h * (max / minmaxdiff) as f32;
+            graphics.draw_line(Vector2 { x: left, y: y1 }, Vector2 { x: right, y: y1 },
+            1.0, Color::from_rgba(0.7, 1.0, 0.7, vis));
+            graphics.draw_line(Vector2 { x: left, y: y2 }, Vector2 { x: right, y: y2 },
+            1.0, Color::from_rgba(0.7, 0.7, 1.0, vis));
+        }
+        for (i, v) in values.iter().enumerate() {
+            let v = if vis < 1.0 { // on fadein/fadeout, smoothly fade to a flat line of y=0.5
+                0.5 + (v - 0.5) * (vis * vis) as f64
+            } else { *v };
+            let mut pos_y = position.1 + position.3 * ((max - v) / minmaxdiff) as f32;
+            let this_vec = Vector2 { x: position.0 + i as f32, y: pos_y };
+            if let Some(prev) = prev_point.take() {
+                graphics.draw_line(
+                    prev,
+                    this_vec,
+                    1.0,
+                    Color::from_rgba(1.0, 1.0, 1.0, vis),
+                );
+            }
+            prev_point = Some(this_vec);
+            
+        }
+    }
+    fn handle_input(&mut self, supr: &mut VideoPropertiesEditor, draw_opts: &mut crate::gui::speedy2d::layout::EditorWindowLayoutContentDrawOptions, input: &mut crate::gui::speedy2d::layout::UserInput) {
+    }
+}
+
+struct EtPlaceholder {
+} impl EtPlaceholder {
+    pub fn new() -> Self {
+        Self {
+        }
+    }
+} impl ExtraTabsInfo for EtPlaceholder {
+    fn title(&self) -> Cow<str> { Cow::Borrowed("PLACEHOLDER") }
+    fn draw_icon(&mut self, vis: f32, hovered: f32, selected: f32, graphics: &mut speedy2d::Graphics2D, position: &(f32, f32, f32, f32), shared_data: &SharedEtData) {
+        graphics.draw_line(Vector2 { x: position.0, y: position.1 }, Vector2 { x: position.0 + position.2, y: position.1 + position.3 }, 1.0, shared_data.unified_color);
+    }
+    fn draw(&mut self, supr: &mut VideoPropertiesEditor, draw_opts: &mut crate::gui::speedy2d::layout::EditorWindowLayoutContentDrawOptions, graphics: &mut speedy2d::Graphics2D, position: &(f32, f32, f32, f32), input: &mut crate::gui::speedy2d::layout::UserInput) {
+    }
+    fn handle_input(&mut self, supr: &mut VideoPropertiesEditor, draw_opts: &mut crate::gui::speedy2d::layout::EditorWindowLayoutContentDrawOptions, input: &mut crate::gui::speedy2d::layout::UserInput) {
+    }
+}
+
+pub trait ExtraTabsInfo {
+    fn title(&self) -> Cow<str>;
+    fn draw_icon(&mut self, vis: f32, hovered: f32, selected: f32, graphics: &mut speedy2d::Graphics2D, position: &(f32, f32, f32, f32), shared_data: &SharedEtData);
+    fn draw(&mut self, supr: &mut VideoPropertiesEditor, draw_opts: &mut crate::gui::speedy2d::layout::EditorWindowLayoutContentDrawOptions, graphics: &mut speedy2d::Graphics2D, position: &(f32, f32, f32, f32), input: &mut crate::gui::speedy2d::layout::UserInput);
+    fn handle_input(&mut self, supr: &mut VideoPropertiesEditor, draw_opts: &mut crate::gui::speedy2d::layout::EditorWindowLayoutContentDrawOptions, input: &mut crate::gui::speedy2d::layout::UserInput);
+}
+struct SharedEtData {
+    pub unified_color: Color,
+}
+
 struct ExtraTabCurve {
     curve: Curve,
 }
@@ -88,10 +364,10 @@ impl EditorWindowLayoutContentTrait for VideoPropertiesEditor {
                             let new_vid = useful::get_elem_from_index_recursive_mut(&mut self.video.lock().unwrap(), &mut index.clone()).unwrap().clone_no_caching();
                             if is_new_vid {
                                 self.tabs = match &new_vid.video.vt {
-                                    VideoTypeEnum::List(_) => vec![ExtraTabsInfo::General, ExtraTabsInfo::ListEdit, ExtraTabsInfo::ListAdd],
-                                    VideoTypeEnum::WithEffect(_, _) => vec![ExtraTabsInfo::General],
-                                    VideoTypeEnum::Image(img) => vec![ExtraTabsInfo::General, ExtraTabsInfo::ImagePath(img.path().clone(), false)],
-                                    VideoTypeEnum::Raw(_) => vec![ExtraTabsInfo::General],
+                                    VideoTypeEnum::List(_) => vec![Some(Box::new(EtGeneral::new())), Some(Box::new(EtPlaceholder::new()))/*ExtraTabsInfo::ListEdit*/, Some(Box::new(EtPlaceholder::new()))/*ExtraTabsInfo::ListAdd*/],
+                                    VideoTypeEnum::WithEffect(_, _) => vec![Some(Box::new(EtGeneral::new()))],
+                                    VideoTypeEnum::Image(img) => vec![Some(Box::new(EtGeneral::new())), Some(Box::new(EtPlaceholder::new()))/*ExtraTabsInfo::ImagePath(img.path().clone(), false)*/],
+                                    VideoTypeEnum::Raw(_) => vec![Some(Box::new(EtGeneral::new()))],
                                 };
                             }
                             Some((index.clone(), new_vid))
@@ -205,214 +481,119 @@ impl EditorWindowLayoutContentTrait for VideoPropertiesEditor {
         };
 
         // very local input
-        match self.editing.0.take() {
-            Some(mut editing) => {
-                let mut tabs = std::mem::replace(&mut self.tabs, Vec::new());
+        let index = self.tab.0; // because we pass &mut self to tab.handle_input, self.tab.0 might change, which would break the vector array (leaving a None value somewhere and overwriting another innocent tab) - so we store the index in a var
+        if let Some(tab) = self.tabs.get_mut(index) {
+            if let Some(mut tab) = tab.take() {
                 let mouse_pos = self.get_inner_mouse_position(draw_opts.my_size_in_pixels.1, &input.clonable.mouse_pos);
-                match (&mut tabs[self.tab.0], &mut editing.1.video.vt) {
-                    (ExtraTabsInfo::General, _) => {
-                        match &input.owned.action {
-                            crate::gui::speedy2d::layout::InputAction::None |
-                            crate::gui::speedy2d::layout::InputAction::Keyboard(_) => (),
-                            crate::gui::speedy2d::layout::InputAction::Mouse(action) => match action {
-                                MouseAction::Moved => (),
-                                MouseAction::ButtonDown(_) => (),
-                                MouseAction::ButtonUp(btn) => {
-                                    let possibilities = 6;
-                                    let mouse_pos = self.get_inner_mouse_position(draw_opts.my_size_in_pixels.1, &input.clonable.mouse_pos);
-                                    let mouse_index = if 0.0 < mouse_pos.0 && mouse_pos.0 < 1.0 && 0.0 < mouse_pos.1 && mouse_pos.1 < 1.0 {
-                                        Some(((mouse_pos.1 * possibilities as f32).floor() as usize).min(possibilities - 1))
-                                    } else { None };
-                                    if let Some(mouse_index) = mouse_index {
-                                        match mouse_index {
-                                            0 => {
-                                                if let Some(index) = Self::get_extra_tabs_index_where(&tabs, |e| match e { ExtraTabsInfo::Curve { id, .. } => *id == 0, _ => false, }) {
-                                                    self.change_tab_to(index, false);
-                                                } else {
-                                                    self.change_tab_to(tabs.len(), false);
-                                                    tabs.push(ExtraTabsInfo::Curve {
-                                                        name: "Edit x-Curve".to_string(), id: 0, write_changes: |v, c| {
-                                                            v.set_pos.x = c;
-                                                        }, curve: editing.1.set_pos.x.clone()
-                                                    } );
-                                                };
-                                            },
-                                            1 => {
-                                                if let Some(index) = Self::get_extra_tabs_index_where(&tabs, |e| match e { ExtraTabsInfo::Curve { id, .. } => *id == 1, _ => false, }) {
-                                                    self.change_tab_to(index, false);
-                                                } else {
-                                                    self.change_tab_to(tabs.len(), false);
-                                                    tabs.push(ExtraTabsInfo::Curve {
-                                                        name: "Edit y-Curve".to_string(), id: 1, write_changes: |v, c| {
-                                                            v.set_pos.y = c;
-                                                        }, curve: editing.1.set_pos.y.clone()
-                                                    } );
-                                                };
-                                            },
-                                            2 => {
-                                                if let Some(index) = Self::get_extra_tabs_index_where(&tabs, |e| match e { ExtraTabsInfo::Curve { id, .. } => *id == 2, _ => false, }) {
-                                                    self.change_tab_to(index, false);
-                                                } else {
-                                                    self.change_tab_to(tabs.len(), false);
-                                                    tabs.push(ExtraTabsInfo::Curve {
-                                                        name: "Edit w-Curve".to_string(), id: 2, write_changes: |v, c| {
-                                                            v.set_pos.w = c;
-                                                        }, curve: editing.1.set_pos.w.clone()
-                                                    } );
-                                                };
-                                            },
-                                            3 => {
-                                                if let Some(index) = Self::get_extra_tabs_index_where(&tabs, |e| match e { ExtraTabsInfo::Curve { id, .. } => *id == 3, _ => false, }) {
-                                                    self.change_tab_to(index, false);
-                                                } else {
-                                                    self.change_tab_to(tabs.len(), false);
-                                                    tabs.push(ExtraTabsInfo::Curve {
-                                                        name: "Edit h-Curve".to_string(), id: 3, write_changes: |v, c| {
-                                                            v.set_pos.h = c;
-                                                        }, curve: editing.1.set_pos.h.clone()
-                                                    } );
-                                                };
-                                            },
-                                            4 => {
-                                                if let Some(index) = Self::get_extra_tabs_index_where(&tabs, |e| match e { ExtraTabsInfo::StartAndLength(..) => true, _ => false, }) {
-                                                    self.change_tab_to(index, false);
-                                                } else {
-                                                    self.change_tab_to(tabs.len(), false);
-                                                    tabs.push(ExtraTabsInfo::StartAndLength(editing.1.set_start_frame, editing.1.set_length));
-                                                };
-                                            },
-                                            5 => {
-                                                if let Some(index) = Self::get_extra_tabs_index_where(&tabs, |e| match e { ExtraTabsInfo::ChangeType => true, _ => false, }) {
-                                                    self.change_tab_to(index, false);
-                                                } else {
-                                                    self.change_tab_to(tabs.len(), false);
-                                                    tabs.push(ExtraTabsInfo::ChangeType);
-                                                };
-                                            },
-                                            _ => (),
-                                        };
-                                    };
-                                },
-                                MouseAction::Scroll(_) => (),
-                            },
-                        };
-                    },
-                    (ExtraTabsInfo::StartAndLength(start, end), _) => {
-                        match &input.owned.action {
-                            crate::gui::speedy2d::layout::InputAction::Mouse(action) => match action {
-                                MouseAction::Moved | MouseAction::ButtonUp(speedy2d::window::MouseButton::Left) => {
-                                    if input.owned.mouse_down_buttons.contains_key(&speedy2d::window::MouseButton::Left) {
-                                        if 0.0 < mouse_pos.0 && mouse_pos.0 < 1.0 && 0.0 < mouse_pos.1 && mouse_pos.1 < 1.0 {
-                                            match (mouse_pos.1 * 4.0).floor() as i32 {
-                                                0 => {},
-                                                1 => *start = ((mouse_pos.0 as f64 - 0.05) / 0.9).max(0.0).min(*end),
-                                                2 => *end = ((mouse_pos.0 as f64 - 0.05) / 0.9).max(*start).min(1.0),
-                                                3 => {
-                                                    self.data().requests.push(EditorWindowLayoutRequest::EditingChangesApply(VideoChanges { pos: None, start: Some(*start), length: Some(*end - *start), video: None, }));
-                                                },
-                                                _ => (),
-                                            };
-                                        };
-                                    };
-                                },
-                                _ => (),
-                            }
-                            _ => (),
-                        }
-                    }
-                    (ExtraTabsInfo::ListAdd, VideoTypeEnum::List(_)) => {
-                        match &input.owned.action {
-                            crate::gui::speedy2d::layout::InputAction::None |
-                            crate::gui::speedy2d::layout::InputAction::Keyboard(_) => (),
-                            crate::gui::speedy2d::layout::InputAction::Mouse(action) => match action {
-                                MouseAction::Moved => (),
-                                MouseAction::ButtonDown(_) => (),
-                                MouseAction::ButtonUp(btn) => {
-                                    let possibilities = 4;
-                                    let mouse_index = if 0.0 < mouse_pos.0 && mouse_pos.0 < 1.0 && 0.0 < mouse_pos.1 && mouse_pos.1 < 1.0 {
-                                        Some(((mouse_pos.1 * possibilities as f32).floor() as usize).min(possibilities - 1))
-                                    } else { None };
-                                    if let Some(mouse_index) = mouse_index {
-                                        self.change_tab_to(1, false);
-                                        let inner_changes = match mouse_index {
-                                            0 => Some(VideoTypeChanges_List::Insert(0, Video::new_full(VideoType::new(VideoTypeEnum::List(Vec::new()))))),
-                                            1 => Some(VideoTypeChanges_List::Insert(0, Video::new_full(VideoType::new(VideoTypeEnum::WithEffect(Box::new(Video::new_full(VideoType::new(VideoTypeEnum::List(Vec::new())))), effect::Effect::new(effect::effects::Nothing::new().as_enum())))))),
-                                            2 => Some(VideoTypeChanges_List::Insert(0, Video::new_full(VideoType::new(VideoTypeEnum::Image(crate::content::image::Image::new(PathBuf::from("/"))))))),
-                                            3 => Some(VideoTypeChanges_List::Insert(0, Video::new_full(VideoType::new(VideoTypeEnum::Raw(crate::content::input_video::InputVideo::new()))))),
-                                            _ => None,
-                                        };
-                                        if let Some(inner_changes) = inner_changes {
-                                            let changes = VideoChanges { pos: None, start: None, length: None, video: Some(VideoTypeChanges::List(vec![inner_changes])), };
-                                            self.data().requests.push(EditorWindowLayoutRequest::EditingChangesApply(changes));
-                                        };
-                                    };
-                                },
-                                MouseAction::Scroll(_) => (),
-                            },
-                        };
-                    },
-                    (_, VideoTypeEnum::List(_)) => (),
-                    (_, VideoTypeEnum::WithEffect(_, _)) => (),
-                    (ExtraTabsInfo::ImagePath(path, ends_in_path_sep), VideoTypeEnum::Image(img)) => {
-                        match &input.owned.action {
-                            crate::gui::speedy2d::layout::InputAction::None => (),
-                            crate::gui::speedy2d::layout::InputAction::Mouse(_) => (),
-                            crate::gui::speedy2d::layout::InputAction::Keyboard(action) => match action {
-                                crate::gui::speedy2d::layout::KeyboardAction::Pressed(_, _) => (),
-                                crate::gui::speedy2d::layout::KeyboardAction::Released(_, _) => (),
-                                crate::gui::speedy2d::layout::KeyboardAction::Typed(ch) => match useful::CharOrAction::from(ch) {
-                                    useful::CharOrAction::Char(ch) => match ch {
-                                        '/' | '\\' => {
-                                            path.push("");
-                                            *ends_in_path_sep = true;
-                                        },
-                                        _ => if *ends_in_path_sep {
-                                            path.push(ch.to_string());
-                                            *ends_in_path_sep = false;
-                                        } else {
-                                            let mut name = match path.file_name() {
-                                                Some(s) => s.to_string_lossy().to_string(),
-                                                None => String::new(),
-                                            };
-                                            name.push(ch);
-                                            path.set_file_name(name);
-                                        },
-                                    },
-                                    useful::CharOrAction::Enter => {
-                                        self.data().requests.push(EditorWindowLayoutRequest::EditingChangesApply(VideoChanges {
-                                            video: Some(VideoTypeChanges::Image(ImageChanges {
-                                                path: Some(path.clone()),
-                                                ..Default::default()
-                                            })),
-                                            ..Default::default()
-                                        }));
-                                    },
-                                    useful::CharOrAction::Backspace => {
-                                        let mut name = match path.file_name() { Some(s) => s.to_string_lossy().to_string(), None => String::new() };
-                                        if !*ends_in_path_sep { name.pop(); };
-                                        if name.len() == 0 {
-                                            *ends_in_path_sep = true;
-                                        };
-                                        path.set_file_name(name);
-                                    },
-                                    useful::CharOrAction::Delete => (),
-                                    useful::CharOrAction::Tab => (),
-                                    useful::CharOrAction::Ignored => (),
-                                },
-                            },
-                        };
-                    },
-                    (ExtraTabsInfo::Curve { .. }, _) => {
-                        /* TODO */
-                    },
-                    (_, VideoTypeEnum::Image(_)) => (),
-                    (_, VideoTypeEnum::Raw(_)) => (),
-                };
-                self.editing.0 = Some(editing);
-                self.tabs = tabs;
-            },
-            None => (),
-        };
+                let prev_mouse_pos = std::mem::replace(&mut input.clonable.mouse_pos, mouse_pos);
+                tab.handle_input(self, draw_opts, input);
+                self.tabs[index] = Some(tab);
+                input.clonable.mouse_pos = prev_mouse_pos;
+            }
+        }
+        // TODO: put this in trait objects
+        // match self.editing.0.take() {
+        //     Some(mut editing) => {
+        //         let mut tabs = std::mem::replace(&mut self.tabs, Vec::new());
+        //         let mouse_pos = self.get_inner_mouse_position(draw_opts.my_size_in_pixels.1, &input.clonable.mouse_pos);
+        //         match (&mut tabs[self.tab.0], &mut editing.1.video.vt) {
+        //             (ExtraTabsInfo::General, _) => {
+        //             },
+        //             (ExtraTabsInfo::StartAndLength(start, end), _) => {
+        //             }
+        //             (ExtraTabsInfo::ListAdd, VideoTypeEnum::List(_)) => {
+        //                 match &input.owned.action {
+        //                     crate::gui::speedy2d::layout::InputAction::None |
+        //                     crate::gui::speedy2d::layout::InputAction::Keyboard(_) => (),
+        //                     crate::gui::speedy2d::layout::InputAction::Mouse(action) => match action {
+        //                         MouseAction::Moved => (),
+        //                         MouseAction::ButtonDown(_) => (),
+        //                         MouseAction::ButtonUp(btn) => {
+        //                             let possibilities = 4;
+        //                             let mouse_index = if 0.0 < mouse_pos.0 && mouse_pos.0 < 1.0 && 0.0 < mouse_pos.1 && mouse_pos.1 < 1.0 {
+        //                                 Some(((mouse_pos.1 * possibilities as f32).floor() as usize).min(possibilities - 1))
+        //                             } else { None };
+        //                             if let Some(mouse_index) = mouse_index {
+        //                                 self.change_tab_to(1, false);
+        //                                 let inner_changes = match mouse_index {
+        //                                     0 => Some(VideoTypeChanges_List::Insert(0, Video::new_full(VideoType::new(VideoTypeEnum::List(Vec::new()))))),
+        //                                     1 => Some(VideoTypeChanges_List::Insert(0, Video::new_full(VideoType::new(VideoTypeEnum::WithEffect(Box::new(Video::new_full(VideoType::new(VideoTypeEnum::List(Vec::new())))), effect::Effect::new(effect::effects::Nothing::new().as_enum())))))),
+        //                                     2 => Some(VideoTypeChanges_List::Insert(0, Video::new_full(VideoType::new(VideoTypeEnum::Image(crate::content::image::Image::new(PathBuf::from("/"))))))),
+        //                                     3 => Some(VideoTypeChanges_List::Insert(0, Video::new_full(VideoType::new(VideoTypeEnum::Raw(crate::content::input_video::InputVideo::new()))))),
+        //                                     _ => None,
+        //                                 };
+        //                                 if let Some(inner_changes) = inner_changes {
+        //                                     let changes = VideoChanges { pos: None, start: None, length: None, video: Some(VideoTypeChanges::List(vec![inner_changes])), };
+        //                                     self.data().requests.push(EditorWindowLayoutRequest::EditingChangesApply(changes));
+        //                                 };
+        //                             };
+        //                         },
+        //                         MouseAction::Scroll(_) => (),
+        //                     },
+        //                 };
+        //             },
+        //             (_, VideoTypeEnum::List(_)) => (),
+        //             (_, VideoTypeEnum::WithEffect(_, _)) => (),
+        //             (ExtraTabsInfo::ImagePath(path, ends_in_path_sep), VideoTypeEnum::Image(img)) => {
+        //                 match &input.owned.action {
+        //                     crate::gui::speedy2d::layout::InputAction::None => (),
+        //                     crate::gui::speedy2d::layout::InputAction::Mouse(_) => (),
+        //                     crate::gui::speedy2d::layout::InputAction::Keyboard(action) => match action {
+        //                         crate::gui::speedy2d::layout::KeyboardAction::Pressed(_, _) => (),
+        //                         crate::gui::speedy2d::layout::KeyboardAction::Released(_, _) => (),
+        //                         crate::gui::speedy2d::layout::KeyboardAction::Typed(ch) => match useful::CharOrAction::from(ch) {
+        //                             useful::CharOrAction::Char(ch) => match ch {
+        //                                 '/' | '\\' => {
+        //                                     path.push("");
+        //                                     *ends_in_path_sep = true;
+        //                                 },
+        //                                 _ => if *ends_in_path_sep {
+        //                                     path.push(ch.to_string());
+        //                                     *ends_in_path_sep = false;
+        //                                 } else {
+        //                                     let mut name = match path.file_name() {
+        //                                         Some(s) => s.to_string_lossy().to_string(),
+        //                                         None => String::new(),
+        //                                     };
+        //                                     name.push(ch);
+        //                                     path.set_file_name(name);
+        //                                 },
+        //                             },
+        //                             useful::CharOrAction::Enter => {
+        //                                 self.data().requests.push(EditorWindowLayoutRequest::EditingChangesApply(VideoChanges {
+        //                                     video: Some(VideoTypeChanges::Image(ImageChanges {
+        //                                         path: Some(path.clone()),
+        //                                         ..Default::default()
+        //                                     })),
+        //                                     ..Default::default()
+        //                                 }));
+        //                             },
+        //                             useful::CharOrAction::Backspace => {
+        //                                 let mut name = match path.file_name() { Some(s) => s.to_string_lossy().to_string(), None => String::new() };
+        //                                 if !*ends_in_path_sep { name.pop(); };
+        //                                 if name.len() == 0 {
+        //                                     *ends_in_path_sep = true;
+        //                                 };
+        //                                 path.set_file_name(name);
+        //                             },
+        //                             useful::CharOrAction::Delete => (),
+        //                             useful::CharOrAction::Tab => (),
+        //                             useful::CharOrAction::Ignored => (),
+        //                         },
+        //                     },
+        //                 };
+        //             },
+        //             (ExtraTabsInfo::Curve { .. }, _) => {
+        //                 /* TODO */
+        //             },
+        //             (_, VideoTypeEnum::Image(_)) => (),
+        //             (_, VideoTypeEnum::Raw(_)) => (),
+        //         };
+        //         self.editing.0 = Some(editing);
+        //         self.tabs = tabs;
+        //     },
+        //     None => (),
+        // };
     }
     
     fn as_enum(self) -> crate::gui::speedy2d::content_list::EditorWindowLayoutContent {
@@ -494,7 +675,7 @@ impl VideoPropertiesEditor {
                 graphics.draw_line(Vector2 { x, y, }, Vector2 { x, y: y + line_height, }, 1.0, Color::from_rgba(0.6, 0.6, 0.6, vis));
                 for tab_in_line in 0..tabs_this_line {
                     if index >= num_of_tabs { break; };
-                    let tab = &self.tabs[index];
+                    let tab = &mut self.tabs[index].as_mut().unwrap();
                     let tab_info = &mut self.tabs_info[index];
                     let hovered = match (tab_info.hovered, tab_info.hovered_changed) {
                         (true, None) => 1.0,
@@ -519,15 +700,16 @@ impl VideoPropertiesEditor {
                         },
                     };
                     let mut x = x + tab_in_line as f32 * line_height;
-                    let text = font.layout_text(match tab {
-                        ExtraTabsInfo::General => "G",
-                        ExtraTabsInfo::StartAndLength(..) => "t",
-                        ExtraTabsInfo::ChangeType => "ct",
-                        ExtraTabsInfo::Curve {..} => "~",
-                        ExtraTabsInfo::ListEdit => "L",
-                        ExtraTabsInfo::ListAdd => "+",
-                        ExtraTabsInfo::ImagePath(_, _) => "./",
-                    }, line_height * 0.75, TextOptions::new());
+                    // TODO: Make good icons or smth idk
+                    // let text = font.layout_text(match tab.draw_icon(1.0, graphics) {
+                    //     ExtraTabsInfo::General => "G",
+                    //     ExtraTabsInfo::StartAndLength(..) => "t",
+                    //     ExtraTabsInfo::ChangeType => "ct",
+                    //     ExtraTabsInfo::Curve {..} => "~",
+                    //     ExtraTabsInfo::ListEdit => "L",
+                    //     ExtraTabsInfo::ListAdd => "+",
+                    //     ExtraTabsInfo::ImagePath(_, _) => "./",
+                    // }, line_height * 0.75, TextOptions::new());
                     let (selected, reset_tab_old) = match &self.tab {
                         (tab, None) => (if index == *tab { 1.0 } else { 0.0 }, false),
                         (tab, Some((old_tab, time))) => {
@@ -542,21 +724,16 @@ impl VideoPropertiesEditor {
                         },
                     };
                     if reset_tab_old { self.tab.1 = None; };
-                    let selected = selected * 0.5;
-                    let tab_color = Color::from_rgba(1.0 - selected - hovered * 0.5, 1.0 - selected, 1.0 - hovered * 0.5, vis);
+                    let tab_color = {
+                        let selected = selected * 0.5;
+                        Color::from_rgba(1.0 - selected - hovered * 0.5, 1.0 - selected, 1.0 - hovered * 0.5, vis)
+                    };
                     if hovered > 0.0 {
-                        let text = font.layout_text(match tab {
-                        ExtraTabsInfo::General => "general",
-                        ExtraTabsInfo::StartAndLength(..) => "time (start/length)",
-                        ExtraTabsInfo::ChangeType => "change type",
-                        ExtraTabsInfo::Curve {name, ..} => name.as_str(),
-                        ExtraTabsInfo::ListEdit => "edit list",
-                        ExtraTabsInfo::ListAdd => "add to list",
-                        ExtraTabsInfo::ImagePath(_, _) => "image path",
-                    }, 0.45 * h, TextOptions::new());
+                        let text = font.layout_text(tab.title().as_ref(), 0.45 * h, TextOptions::new());
                         graphics.draw_text(Vector2 { x: position.0 + (position.2 - text.width()) / 2.0, y: y_tab_bar_top - text.height(), }, Color::from_rgba(tab_color.r(), tab_color.g(), tab_color.b(), vis * hovered), &text)
                     }
-                    graphics.draw_text(Vector2 { x: x + (line_height - text.width()) / 2.0, y: y + 0.125 * line_height, }, tab_color, &text);
+                    // graphics.draw_text(Vector2 { x: x + (line_height - text.width()) / 2.0, y: y + 0.125 * line_height, }, tab_color, &text);
+                    tab.draw_icon(vis, hovered, selected, graphics, &(x, y, line_height, line_height), &SharedEtData { unified_color: tab_color });
                     x += line_height;
                     graphics.draw_line(Vector2 { x: x, y: y, }, Vector2 { x: x, y: y + line_height, }, 1.0, Color::from_rgba(0.6, 0.6, 0.6, vis));
                     index += 1;
@@ -600,164 +777,115 @@ impl VideoPropertiesEditor {
     }
 
     fn draw_tab(&mut self, vis: f32, index: usize, scroll_dist: f32, draw_opts: &mut crate::gui::speedy2d::layout::EditorWindowLayoutContentDrawOptions, graphics: &mut speedy2d::Graphics2D, position: &(f32, f32, f32, f32), input: &mut crate::gui::speedy2d::layout::UserInput) {
-        let per_item_height = self.get_height_of_element_abs(draw_opts.my_size_in_pixels.1);
-        let font = draw_opts.assets_manager.get_default_font();
-        match &mut self.editing.0 {
-            Some((editing_index, editing_video)) => {
-
-                if let Some(tab) = self.tabs.get(index) {
-                    match tab {
-                        ExtraTabsInfo::General => {
-                            // DRAW: GENERAL
-                            let opts = ["x-position", "y-position", "width", "height", "time", "change type"];
-                            let options = opts.len();
-                            let h = position.3 / options as f32;
-                            for (opt, txt) in opts.into_iter().enumerate() {
-                                let y = position.1 + position.3 * opt as f32 / options as f32;
-                                graphics.draw_line(Vector2 { x: position.0, y, }, Vector2 { x: position.0 + position.2, y, }, 1.0, Color::from_rgba(1.0, 1.0, 1.0, vis));
-                                graphics.draw_text(Vector2 { x: position.0, y: y + 0.25 * h, }, Color::from_rgba(1.0, 1.0, 1.0, vis), &font.layout_text(txt, h * 0.5, TextOptions::new()));
-                            };
-                        },
-                        ExtraTabsInfo::StartAndLength(start, end) => {
-                            let y = position.1 + position.3 * 0.375;
-                            graphics.draw_line(Vector2 { x: position.0 + 0.05 * position.2, y: y, }, Vector2 { x: position.0 + (0.05 + 0.9 * *start as f32) * position.2, y: y, }, per_item_height * 0.1, Color::from_rgba(if editing_video.set_start_frame == *start { 0.5 } else { 1.0 }, 0.5, 0.5, vis));
-                            let y = position.1 + position.3 * 0.625;
-                            graphics.draw_line(Vector2 { x: position.0 + 0.05 * position.2, y: y, }, Vector2 { x: position.0 + (0.05 + 0.9 * *end as f32) * position.2, y: y, }, per_item_height * 0.1, Color::from_rgba(if editing_video.set_length == *end - *start { 0.5 } else { 1.0 }, 0.5, 0.5, vis));
-                            let text = font.layout_text(format!("from {}\nto {}", start, end).as_str(), per_item_height * 0.9, TextOptions::new().with_wrap_to_width(position.2, TextAlignment::Center));
-                            graphics.draw_text(Vector2 { x: position.0, y: position.1, }, Color::from_rgba(1.0, 1.0, 1.0, vis), &text);
-                            let text = font.layout_text("click to apply", per_item_height * 0.9, TextOptions::new().with_wrap_to_width(position.2, TextAlignment::Center));
-                            graphics.draw_text(Vector2 { x: position.0, y: position.1 + position.3 - text.height(), }, Color::from_rgba(1.0, 1.0, 1.0, vis), &text);
-                        },
-                        ExtraTabsInfo::ListEdit => {
-                            if let VideoTypeEnum::List(vec) = &mut editing_video.video.vt {
-                                // DRAW: LIST: EDIT
-                                let per_item_height = 2.0 * per_item_height;
-                                let mut y = position.1 - scroll_dist * per_item_height;
-                                for child in vec {
-                                    if y >= -per_item_height {
-                                        let txt = font.layout_text(match &child.video.vt {
-                                            VideoTypeEnum::List(vec) => format!("List [{}]", vec.len()),
-                                            VideoTypeEnum::WithEffect(v, e) => format!("Effect"),
-                                            VideoTypeEnum::Image(_) => format!("Image"),
-                                            VideoTypeEnum::Raw(_) => format!("Video"),
-                                        }.as_str(), per_item_height * 0.7, TextOptions::new());
-                                        graphics.draw_text(Vector2 { x: position.0, y: y, }, Color::from_rgba(1.0, 1.0, 1.0, vis), &txt);
-                                    };
-                                    y += per_item_height;
-                                };
-                            }
-                        },
-                        ExtraTabsInfo::ListAdd => {
-                            // DRAW: LIST: ADD
-                            let possibilities = [
-                                ("List", "Holds multiple objects, applying its own size and position to all of them."),
-                                ("Effect", "Applies effects to an object."),
-                                ("Image", "Displays a static image"),
-                                ("Video", "Displays a video."),
-                            ];
-                            let mouse_index = if 0.0 < input.clonable.mouse_pos.0 && input.clonable.mouse_pos.0 < 1.0 && 0.0 < input.clonable.mouse_pos.1 && input.clonable.mouse_pos.1 < 1.0 {
-                                Some(((input.clonable.mouse_pos.1 * possibilities.len() as f32).floor() as usize).min(possibilities.len() - 1))
-                            } else { None };
-                            let h = position.3 / possibilities.len() as f32;
-                            for (possibility, text) in possibilities.into_iter().enumerate() {
-                                let hover = Some(possibility) == mouse_index;
-                                let y = position.1 + position.3 * possibility as f32 / possibilities.len() as f32;
-                                graphics.draw_line(Vector2 { x: position.0, y: y, }, Vector2 { x: position.0 + position.2, y: y, }, 1.0, Color::from_rgba(0.5, 0.5, 0.5, vis));
-                                graphics.draw_text(Vector2 { x: position.0, y: y, }, Color::from_rgba(if hover { 1.0 } else { 0.7 }, if hover { 1.0 } else { 0.7 }, if hover { 1.0 } else { 0.7 }, vis), &draw_opts.assets_manager.get_default_font().layout_text(text.0, h * 0.5, TextOptions::new()));
-                                graphics.draw_text(Vector2 { x: position.0, y: y + 0.5 * h, }, Color::from_rgba(0.7, 0.7, 0.7, vis), &draw_opts.assets_manager.get_default_font().layout_text(text.1, h * 0.25, TextOptions::new().with_wrap_to_width(position.2, TextAlignment::Left)));
-                            };
-                        },
-                        ExtraTabsInfo::Curve { curve, .. } => {
-                            let diagram_width = position.2.ceil() as _;
-                            let diagram_width_minus_one_float = (diagram_width - 1) as f64;
-                            let mut values = Vec::with_capacity(diagram_width);
-                            let (mut min, mut max) = (0.0, 1.0);
-                            for i in 0..diagram_width {
-                                let v = curve.get_value(i as f64 / diagram_width_minus_one_float);
-                                if v > max { max = v; }
-                                if v < min { min = v; }
-                                values.push(v);
-                            }
-                            let minmaxdiff = max - min;
-                            let mut prev_point = None;
-                            { // draw 0.0 and 1.0 lines
-                                let left = position.0;
-                                let right = position.0 + position.2;
-                                let y = position.1;
-                                let h = position.3;
-                                let y1 = y + h * ((max - 1.0) / minmaxdiff) as f32;
-                                let y2 = y + h * (max / minmaxdiff) as f32;
-                                graphics.draw_line(Vector2 { x: left, y: y1 }, Vector2 { x: right, y: y1 },
-                                1.0, Color::from_rgba(0.7, 1.0, 0.7, vis));
-                                graphics.draw_line(Vector2 { x: left, y: y2 }, Vector2 { x: right, y: y2 },
-                                1.0, Color::from_rgba(0.7, 0.7, 1.0, vis));
-                            }
-                            for (i, v) in values.iter().enumerate() {
-                                let v = if vis < 1.0 { // on fadein/fadeout, smoothly fade to a flat line of y=0.5
-                                    0.5 + (v - 0.5) * (vis * vis) as f64
-                                } else { *v };
-                                let mut pos_y = position.1 + position.3 * ((max - v) / minmaxdiff) as f32;
-                                let this_vec = Vector2 { x: position.0 + i as f32, y: pos_y };
-                                if let Some(prev) = prev_point.take() {
-                                    graphics.draw_line(
-                                        prev,
-                                        this_vec,
-                                        1.0,
-                                        Color::from_rgba(1.0, 1.0, 1.0, vis),
-                                    );
-                                }
-                                prev_point = Some(this_vec);
-                                
-                            }
-                        },
-                        ExtraTabsInfo::ImagePath(path, _) => {
-                            if let VideoTypeEnum::Image(img) = &mut editing_video.video.vt {
-                                // DRAW: IMAGE
-                                let path_text = font.layout_text(&path.to_string_lossy(), per_item_height * 0.7, TextOptions::new().with_wrap_to_width(position.2, TextAlignment::Left));
-                                let color = match (self.has_keyboard_focus, *path != *img.path()) {
-                                    (false, false) => Color::from_rgba(
-                                        0.8,
-                                        0.8,
-                                        0.8,
-                                        vis
-                                    ),
-                                    (true, false) => Color::from_rgba(
-                                        1.0,
-                                        1.0,
-                                        1.0,
-                                        vis
-                                    ),
-                                    (true, true) => Color::from_rgba(
-                                        1.0,
-                                        0.8,
-                                        0.8,
-                                        vis
-                                    ),
-                                    (false, true) => Color::from_rgba(
-                                        1.0,
-                                        0.5,
-                                        0.5,
-                                        vis
-                                    ),
-                                };
-                                graphics.draw_text(Vector2 { x: position.0, y: position.1 }, color, &path_text);
-                            }
-                        },
-                        _ => (),
-                    };
-                };
-            },
-            None => (),
+        if let Some(tab) = self.tabs.get_mut(index) {
+            if let Some(mut tab) = tab.take() {
+                draw_opts.visibility_factors.video_properties_editor_tabs = vis;
+                tab.draw(self, draw_opts, graphics, position, input);
+                self.tabs[index] = Some(tab);
+            }
         }
+//         let per_item_height = self.get_height_of_element_abs(draw_opts.my_size_in_pixels.1);
+//         let font = draw_opts.assets_manager.get_default_font();
+//         match &mut self.editing.0 {
+//             Some((editing_index, editing_video)) => {
+// 
+//                 if let Some(tab) = self.tabs.get(index) {
+//                     match tab {
+//                         ExtraTabsInfo::General => {
+//                         },
+//                         ExtraTabsInfo::StartAndLength(start, end) => {
+//                         },
+//                         ExtraTabsInfo::ListEdit => {
+//                             if let VideoTypeEnum::List(vec) = &mut editing_video.video.vt {
+//                                 // DRAW: LIST: EDIT
+//                                 let per_item_height = 2.0 * per_item_height;
+//                                 let mut y = position.1 - scroll_dist * per_item_height;
+//                                 for child in vec {
+//                                     if y >= -per_item_height {
+//                                         let txt = font.layout_text(match &child.video.vt {
+//                                             VideoTypeEnum::List(vec) => format!("List [{}]", vec.len()),
+//                                             VideoTypeEnum::WithEffect(v, e) => format!("Effect"),
+//                                             VideoTypeEnum::Image(_) => format!("Image"),
+//                                             VideoTypeEnum::Raw(_) => format!("Video"),
+//                                         }.as_str(), per_item_height * 0.7, TextOptions::new());
+//                                         graphics.draw_text(Vector2 { x: position.0, y: y, }, Color::from_rgba(1.0, 1.0, 1.0, vis), &txt);
+//                                     };
+//                                     y += per_item_height;
+//                                 };
+//                             }
+//                         },
+//                         ExtraTabsInfo::ListAdd => {
+//                             // DRAW: LIST: ADD
+//                             let possibilities = [
+//                                 ("List", "Holds multiple objects, applying its own size and position to all of them."),
+//                                 ("Effect", "Applies effects to an object."),
+//                                 ("Image", "Displays a static image"),
+//                                 ("Video", "Displays a video."),
+//                             ];
+//                             let mouse_index = if 0.0 < input.clonable.mouse_pos.0 && input.clonable.mouse_pos.0 < 1.0 && 0.0 < input.clonable.mouse_pos.1 && input.clonable.mouse_pos.1 < 1.0 {
+//                                 Some(((input.clonable.mouse_pos.1 * possibilities.len() as f32).floor() as usize).min(possibilities.len() - 1))
+//                             } else { None };
+//                             let h = position.3 / possibilities.len() as f32;
+//                             for (possibility, text) in possibilities.into_iter().enumerate() {
+//                                 let hover = Some(possibility) == mouse_index;
+//                                 let y = position.1 + position.3 * possibility as f32 / possibilities.len() as f32;
+//                                 graphics.draw_line(Vector2 { x: position.0, y: y, }, Vector2 { x: position.0 + position.2, y: y, }, 1.0, Color::from_rgba(0.5, 0.5, 0.5, vis));
+//                                 graphics.draw_text(Vector2 { x: position.0, y: y, }, Color::from_rgba(if hover { 1.0 } else { 0.7 }, if hover { 1.0 } else { 0.7 }, if hover { 1.0 } else { 0.7 }, vis), &draw_opts.assets_manager.get_default_font().layout_text(text.0, h * 0.5, TextOptions::new()));
+//                                 graphics.draw_text(Vector2 { x: position.0, y: y + 0.5 * h, }, Color::from_rgba(0.7, 0.7, 0.7, vis), &draw_opts.assets_manager.get_default_font().layout_text(text.1, h * 0.25, TextOptions::new().with_wrap_to_width(position.2, TextAlignment::Left)));
+//                             };
+//                         },
+//                         ExtraTabsInfo::Curve { curve, .. } => {
+//                         },
+//                         ExtraTabsInfo::ImagePath(path, _) => {
+//                             if let VideoTypeEnum::Image(img) = &mut editing_video.video.vt {
+//                                 // DRAW: IMAGE
+//                                 let path_text = font.layout_text(&path.to_string_lossy(), per_item_height * 0.7, TextOptions::new().with_wrap_to_width(position.2, TextAlignment::Left));
+//                                 let color = match (self.has_keyboard_focus, *path != *img.path()) {
+//                                     (false, false) => Color::from_rgba(
+//                                         0.8,
+//                                         0.8,
+//                                         0.8,
+//                                         vis
+//                                     ),
+//                                     (true, false) => Color::from_rgba(
+//                                         1.0,
+//                                         1.0,
+//                                         1.0,
+//                                         vis
+//                                     ),
+//                                     (true, true) => Color::from_rgba(
+//                                         1.0,
+//                                         0.8,
+//                                         0.8,
+//                                         vis
+//                                     ),
+//                                     (false, true) => Color::from_rgba(
+//                                         1.0,
+//                                         0.5,
+//                                         0.5,
+//                                         vis
+//                                     ),
+//                                 };
+//                                 graphics.draw_text(Vector2 { x: position.0, y: position.1 }, color, &path_text);
+//                             }
+//                         },
+//                         _ => (),
+//                     };
+//                 };
+//             },
+//             None => (),
+//         }
     }
 
 
 
-    pub fn get_extra_tabs_index_where(tabs: &Vec<ExtraTabsInfo>, f: fn(&ExtraTabsInfo) -> bool) -> Option<usize> {
+    pub fn get_extra_tabs_index_where(tabs: &Vec<Option<Box<dyn ExtraTabsInfo>>>, f: fn(&dyn ExtraTabsInfo) -> bool) -> Option<usize> {
         for (i, extra_tab) in tabs.iter().enumerate() {
-            if f(extra_tab) {
-                return Some(i);
-            };
+            if let Some(tab) = extra_tab {
+                if f(tab.as_ref()) {
+                    return Some(i);
+                };
+            }
         };
         return None;
     }

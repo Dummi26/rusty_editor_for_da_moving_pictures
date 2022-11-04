@@ -37,9 +37,17 @@ pub struct EditorWindowLayoutContentDrawOptions {
     pub assets_manager: AssetsManager,
     pub draw_mode: EditorWindowLayoutContentDrawMode,
     pub general_visibility: f32,
-    pub visibility_factors: (f32, ()/* this is only here so the compiler accepts my tuple */),
+    pub visibility_factors: EditorWindowLayoutContentDrawOptionsVisibilityFactors,
     pub visibility: f32,
 }
+pub struct EditorWindowLayoutContentDrawOptionsVisibilityFactors {
+    pub qvidrunner: f32,
+    pub video_properties_editor_tabs: f32,
+} impl Default for EditorWindowLayoutContentDrawOptionsVisibilityFactors {
+    fn default() -> Self { Self {
+        qvidrunner: 1.0,
+        video_properties_editor_tabs: 0.0,
+} } }
 impl EditorWindowLayoutContentDrawOptions {
 }
 #[derive(Clone)]

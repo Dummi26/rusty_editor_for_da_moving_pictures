@@ -168,7 +168,7 @@ impl EditorWindowHandler {
                 assets_manager,
                 draw_mode: EditorWindowLayoutContentDrawMode::Static(EditorWindowLayoutContentSDrawMode::Normal),
                 general_visibility: 0.0,
-                visibility_factors: (1.0, ()),
+                visibility_factors: Default::default(),
                 visibility: 0.0,
             },
             draw_mode: EditorWindowHandlerDrawMode::Static(EditorWindowLayoutContentSDrawMode::Normal),
@@ -327,12 +327,12 @@ impl WindowHandler for EditorWindowHandler {
                     };
                     open
                 };
-                self.draw_opts.visibility_factors.0 = 1.0 - 0.75 * open;
+                self.draw_opts.visibility_factors.qvidrunner = 1.0 - 0.75 * open;
             } else {
             }
         }
 
-        self.draw_opts.visibility = self.draw_opts.general_visibility * self.draw_opts.visibility_factors.0;
+        self.draw_opts.visibility = self.draw_opts.general_visibility * self.draw_opts.visibility_factors.qvidrunner;
 
         // Draw (custom)
 
