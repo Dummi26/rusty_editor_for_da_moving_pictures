@@ -17,7 +17,7 @@ pub struct VideoTree {
 impl VideoTree {
     pub fn new(video: Arc<Mutex<Video>>) -> Self {
         Self {
-            local_video_copy: Some({ let v = video.lock().unwrap(); v.clone_no_caching() }),
+            local_video_copy: Some({ let v = video.lock().unwrap().clone_no_caching(); v.clone_no_caching() }),
             video,
             editing_index: (None, None),
             scroll_dist: 0.0,
@@ -36,12 +36,12 @@ impl EditorWindowLayoutContentTrait for VideoTree {
 
         for action in input.get_custom_actions().unwrap() {
             match action {
-                CustomDrawActions::VideoPreviewResize(false) => {
-                    self.local_video_copy = Some(self.video.lock().unwrap().clone_no_caching());
-                },
-                CustomDrawActions::VideoPreviewResize(true) => (),
+                CustomDrawActions::SetVideoPreviewActive(_) => (),
                 CustomDrawActions::SetEditingTo(new_index) => {
                     self.editing_index = (new_index.clone(), Some(Instant::now()));
+                },
+                CustomDrawActions::ChangedVideo => {
+                    self.local_video_copy = Some(self.video.lock().unwrap().clone_no_caching());
                 },
             };
         };
@@ -198,7 +198,7 @@ impl VideoTree {
         let sd = self.scroll_dist.clone();
         let mut vid = self.local_video_copy.take().unwrap();
         graphics.set_clip(Some(speedy2d::shape::Rectangle::from_tuples((position.0.ceil() as i32, position.1.ceil() as i32), ((position.0 + position.2).floor() as i32, (position.1 + position.3).floor() as i32))));
-        self.draw_type_normal_one(vis, &mut vid, draw_opts, graphics, position, &mut (0.0, sd),&mut 0, input);
+        self.draw_type_normal_one(vis, &mut vid, draw_opts, graphics, position, &mut (0.0, sd), &mut 0, input);
         graphics.set_clip(None);
         self.local_video_copy = Some(vid);
     }
@@ -219,7 +219,7 @@ impl VideoTree {
                 crate::video::VideoTypeEnum::Raw(i) => format!("Video: {}", i.get_dir().to_string_lossy().to_string()),
             }
         }
-        
+
         let elem_height_rel = self.get_height_of_element_rel(draw_opts.my_size_in_pixels.1);
         let elem_height = self.get_height_of_element_abs(draw_opts.my_size_in_pixels.1);
         let elem_y_rel = elem_height_rel * npos.1;
@@ -234,7 +234,7 @@ impl VideoTree {
         let old_npos1 = npos.1.clone();
         npos.0 += 1.0;
         npos.1 += 1.0;
-        
+
         let is_selected_for_editing = self.editing_index.0 == Some(*index);
         let is_almost_clicked_on = self.mouse_pressed_down_on_index == Some(*index);
 

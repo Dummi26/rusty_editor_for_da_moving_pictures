@@ -1,14 +1,12 @@
 use speedy2d::{dimen::Vector2, color::Color, image::{ImageDataType, ImageSmoothingMode}, shape::Rectangle};
 
-use crate::{Clz, multithreading::{automatically_cache_frames::VideoWithAutoCache}, video_cached_frames::VideoCachedFramesOfCertainResolution, video::{VideoChanges, VideoTypeChanges, VideoTypeChanges_List}, curve::Curve, content::content::Content, gui::speedy2d::{layout::{CustomDrawActions, InputAction, EditorWindowLayoutContentData}, content_list::EditorWindowLayoutContentEnum}};
+use crate::{Clz, multithreading::automatically_cache_frames::VideoWithAutoCache, gui::speedy2d::{layout::{CustomDrawActions, InputAction, EditorWindowLayoutContentData}, content_list::EditorWindowLayoutContentEnum}};
 
 use super::super::layout::{EditorWindowLayoutContentTrait, EditorWindowLayoutContentDrawMode, EditorWindowLayoutContentSDrawMode};
 
 pub struct VideoPreview {
     time_created: std::time::Instant,
     video: VideoWithAutoCache,
-    vid_cached_frames: VideoCachedFramesOfCertainResolution,
-    vid_cached_frames_prev: Option<VideoCachedFramesOfCertainResolution>,
     progress: f64,
     mouse_on_progress_bar: Option<f64>,
     mouse_left_button_down_started_on_progress_bar: bool,
@@ -16,44 +14,14 @@ pub struct VideoPreview {
     size: (u32, u32, Option<(f32, f32, std::time::Instant)>),
 }
 impl VideoPreview {
-    pub fn new(video: VideoWithAutoCache) -> Self {
-        let vid_cached_frames = Self::get_with_resulution(&video, 0, 0);
+    pub fn new(vid: std::sync::Arc<std::sync::Mutex<crate::video::Video>>) -> Self {
         Self {
             time_created: std::time::Instant::now(),
-            video,
-            vid_cached_frames,
-            vid_cached_frames_prev: None,
+            video: VideoWithAutoCache::start(vid),
             progress: 0.0, mouse_on_progress_bar: None, mouse_left_button_down_started_on_progress_bar: false,
             layout_content_data: EditorWindowLayoutContentData::default(),
             size: (0, 0, None),
         }
-    }
-}
-impl VideoPreview {
-    fn get_with_resulution(video: &VideoWithAutoCache, width: u32, height: u32) -> VideoCachedFramesOfCertainResolution {
-        let vid = video.get_vid_mutex_arc();
-        let mut vid = vid.lock().unwrap();
-        vid.last_draw.with_resolution_or_create(width, height)
-    }
-    /// Change the resolution of the preview
-    fn update_with_resolution(&mut self, width: u32, height: u32) {
-        self.video.set_width_and_height(width, height);
-        let new = if let Some(prev) = self.vid_cached_frames_prev.take() {
-            if prev.width() == width && prev.height() == height {
-                Some(prev)
-            } else {
-                None
-            }
-        } else {
-            None
-        };
-        eprintln!("{}",
-            Clz::progress(format!("Changed video preview resolution to {}x{}{}", width, height, if new.is_some() { String::from(", reusing previous cache.") } else { String::from(".") }).as_str())
-        );
-        let new = if let Some(n) = new { n } else { Self::get_with_resulution(&self.video, width, height) };
-        self.vid_cached_frames_prev = Some(
-            std::mem::replace(&mut self.vid_cached_frames, new)
-        );
     }
 }
 impl VideoPreview {
@@ -135,17 +103,16 @@ impl VideoPreview {
             let (new_width, new_height) = (size.0 as u32, (size.1 * 0.95) as u32);
             if self.size.0 != new_width || self.size.1 != new_height {
                 self.size = (new_width, new_height, None);
-                self.update_with_resolution(new_width, new_height);
+                self.video.set_width_and_height(new_width, new_height);
             } else {
                 self.size.2 = None;
             }
         }
 
         {
-            let img = self.vid_cached_frames.cache().lock().unwrap();
-            let img = img.get_frame(match self.mouse_on_progress_bar { Some(v) => v, None => self.progress, });
-            if let Some((_, img)) = img {
-                let handle = graphics.create_image_from_raw_pixels(ImageDataType::RGBA, ImageSmoothingMode::NearestNeighbor, Vector2::new(img.frame.width(), img.frame.height()), img.frame.as_bytes()).unwrap();
+            let img = &self.video.shared.lock().unwrap().frame;
+            if let Some(img) = img {
+                let handle = graphics.create_image_from_raw_pixels(ImageDataType::RGB, ImageSmoothingMode::NearestNeighbor, Vector2::new(img.width(), img.height()), img.as_bytes()).unwrap();
                 graphics.draw_rectangle_image_tinted(Rectangle::new(Vector2::new(position.0, position.1), Vector2::new(position.0 + position.2, position.1 + position.3 * 0.95)), Color::from_rgba(1.0, 1.0, 1.0, visibility), &handle);
             }
         }
@@ -171,20 +138,15 @@ impl EditorWindowLayoutContentTrait for VideoPreview {
     fn draw_onto_custom(&mut self, draw_opts: &mut crate::gui::speedy2d::layout::EditorWindowLayoutContentDrawOptions, graphics: &mut speedy2d::Graphics2D, position: &(f32, f32, f32, f32), input: &mut crate::gui::speedy2d::layout::UserInput) {
 
         {
-            // ok(n) will return true the first time, then always false. Useful to ensure a certain action is only executed once even if it is present multiple times.
-            let mut ok = [false; 2]; let mut ok = |i: usize| !std::mem::replace(&mut ok[i], true);
-            //
             for action in input.get_custom_actions().unwrap().iter() {
                 match action {
-                    CustomDrawActions::VideoPreviewResize(false) => if ok(0) {
-                        self.update_with_resolution(0, 0);
-                        self.vid_cached_frames_prev = None;
-                        input.add_custom_action(CustomDrawActions::VideoPreviewResize(true));
-                    },
-                    CustomDrawActions::VideoPreviewResize(true) => if ok(1) {
-                        self.update_with_resolution(self.size.0, self.size.1);
-                    },
+                    CustomDrawActions::SetVideoPreviewActive(false) => { self.video.pause(true); },
+                    CustomDrawActions::SetVideoPreviewActive(true) => { self.video.resume(); },
                     CustomDrawActions::SetEditingTo(_) => (), // TODO?
+                    CustomDrawActions::ChangedVideo => {
+                        self.video.pause(true); // clear cache
+                        self.video.resume(); // start producing frames again
+                    },
                 };
             };
         };
@@ -240,7 +202,7 @@ impl EditorWindowLayoutContentTrait for VideoPreview {
                     let mouse_held_from_progress_bar = self.mouse_left_button_down_started_on_progress_bar && input.owned.mouse_down_buttons.contains_key(&speedy2d::window::MouseButton::Left);
                     self.mouse_on_progress_bar = if mouse_held_from_progress_bar || on_progress_bar(mouse_pos) {
                         let prog = ((mouse_pos.0 as f64 - 0.1) / 0.8).max(0.0).min(1.0);
-                        if mouse_held_from_progress_bar { self.progress = prog; };
+                        if mouse_held_from_progress_bar { self.progress = prog; self.video.set_desired_progress(prog); };
                         Some(prog)
                     } else { None };
                 },
@@ -248,7 +210,7 @@ impl EditorWindowLayoutContentTrait for VideoPreview {
                     self.mouse_left_button_down_started_on_progress_bar = false;
                     match self.mouse_on_progress_bar {
                         Some(prog) => match btn {
-                            speedy2d::window::MouseButton::Left => {self.progress = prog; self.mouse_left_button_down_started_on_progress_bar = true; }
+                            speedy2d::window::MouseButton::Left => {self.progress = prog; self.video.set_desired_progress(prog); self.mouse_left_button_down_started_on_progress_bar = true; }
                             _ => (),
                         },
                         None => {

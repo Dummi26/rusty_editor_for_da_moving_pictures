@@ -1,8 +1,6 @@
-use std::{rc::Rc, sync::RwLock, slice::{IterMut, Iter}};
-
 use image::{DynamicImage, GenericImageView, GenericImage, Pixel, Rgba};
 
-use crate::{curve::Curve, video_cached_frames::VideoCachedFrames, video_render_settings::VideoRenderSettings, content::{content::Content, image::ImageChanges, input_video::InputVideoChanges}, cli::Clz};
+use crate::{curve::Curve, video_render_settings::VideoRenderSettings, content::{content::Content, image::ImageChanges, input_video::InputVideoChanges}, cli::Clz};
 
 pub struct Video {
     // - - The video's data (what is to be saved to the project file) - -
@@ -17,10 +15,7 @@ pub struct Video {
     // - -     -     - -
     // done: The values that are set after drawing
     /// Due to caching, the rendered image might not be exactly the desired one. If this is the case, this value will differ from the progress used by draw() etc.
-    pub done_actual_progress: f64,
 
-    /// Caching for performance reasons (at the cost of memory usage)
-    pub last_draw: VideoCachedFrames,
     generic_content_data: crate::content::content::GenericContentData,
     pub as_content_changes: VideoChanges,
 }
@@ -88,11 +83,10 @@ impl Content for Video {
             if !self.video.apply_changes() { err = true; };
             out = true;
         };
-        self.last_draw.clear_resolutions();
         out && !err
-        
+
     }
-    
+
     fn generic_content_data(&mut self) -> &mut crate::content::content::GenericContentData { &mut self.generic_content_data }
 }
 impl Video {
@@ -103,8 +97,6 @@ impl Video {
             set_length: 1.0,
             video,
             transparency_adjustments: TransparencyAdjustments::None,
-            done_actual_progress: 0.0,
-            last_draw: VideoCachedFrames::new(),
             generic_content_data: crate::content::content::GenericContentData::default(),
             as_content_changes: VideoChanges::default(),
         }
@@ -116,8 +108,6 @@ impl Video {
             set_length: length,
             video,
             transparency_adjustments: TransparencyAdjustments::None,
-            done_actual_progress: 0.0,
-            last_draw: VideoCachedFrames::new(),
             generic_content_data: crate::content::content::GenericContentData::default(),
             as_content_changes: VideoChanges::default(),
         }
@@ -129,14 +119,12 @@ impl Video {
             set_length: length,
             video,
             transparency_adjustments: TransparencyAdjustments::None,
-            done_actual_progress: 0.0,
-            last_draw: VideoCachedFrames::new(),
             generic_content_data: crate::content::content::GenericContentData::default(),
             as_content_changes: VideoChanges::default(),
         }
     }
 
-    pub fn prep_draw(&mut self, outer_progress: f64) -> Option<PrepDrawData> {
+    pub fn prep_draw(&self, outer_progress: f64) -> Option<PrepDrawData> {
         // handle outer_progress
         if outer_progress < self.set_start_frame { return None; };
         let frames_since_start = outer_progress - self.set_start_frame;
@@ -170,34 +158,14 @@ impl Video {
     }
 
     fn draw2(&mut self, image: &mut DynamicImage, prep_data: PrepDrawData, pos: Pos<i32, u32>, render_settings: &VideoRenderSettings) {
-        
+
         let progress = prep_data.progress;
 
-        {
-            let cached_frames_of_correct_resolution = if render_settings.allow_retrieval_of_cached_frames != None { self.last_draw.with_resolution(pos.w, pos.h) } else { None };
-            match cached_frames_of_correct_resolution {
-                Some(cache) => {
-                    match cache.cache().lock().unwrap().get_frame(progress) {
-                        Some((dist, frame)) => {
-                            if dist <= render_settings.allow_retrieval_of_cached_frames.expect("This always exists because for cfocr to be Some, arocf cannot be none.") {
-                                self.done_actual_progress = frame.progress;
-                                draw_to_canvas(image, &pos, &frame.frame, prep_data.transparency_adjustments.convert(&|c| c.get_value(progress) as f32));
-                                return; // drawing from cache, return to prevent rendering
-                            };
-                        },
-                        None => {},
-                    };
-                },
-                None => {},
-            };
-        };
         {
             // Rendering
             let img = self.create_rendered_image(&pos, progress, render_settings);
             // Drawing
             draw_to_canvas(image, &pos, &img, prep_data.transparency_adjustments.convert(&|c| c.get_value(progress) as f32));
-            // Caching
-            self.last_draw.add_frame(progress, pos.w, pos.h, img);
         };
         fn draw_to_canvas(image: &mut DynamicImage, pos: &Pos<i32, u32>, img: &DynamicImage, transparency_adjustments: TransparencyAdjustments<f32>) {
 
@@ -273,7 +241,6 @@ impl Video {
     fn create_rendered_image(&mut self, pos: &Pos<i32, u32>, progress: f64, render_settings: &VideoRenderSettings) -> DynamicImage {
         let mut img = DynamicImage::new_rgba8(pos.w, pos.h);
         self.draw3(progress, render_settings, &mut img); // draw onto this image
-        self.done_actual_progress = progress;
         img
     }
 

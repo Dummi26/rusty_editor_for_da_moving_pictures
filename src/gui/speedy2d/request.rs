@@ -97,7 +97,7 @@ impl RequestActions {
                 } else {
                     println!("{}", Clz::undecided("Attempted to apply some changes to a video part, but no part is selected for editing."));
                 },
-                EditorWindowLayoutRequest::AppliedChangesToVideo => todo!(),
+                EditorWindowLayoutRequest::AppliedChangesToVideo => self.edited_part_requires_update = true /* TODO: does this work? */,
             };
         };
     }
@@ -106,7 +106,7 @@ impl RequestActions {
 
     pub fn new(container: &mut EditorWindowHandler) -> Self {
         Self {
-            video: container.project.vid.get_vid_mutex_arc(),
+            video: container.project.vid.clone(),
             dragged_window: container.dragged_window.take(),
             dragged_window_already_set: false,
             edited_part: container.edited_part.take(),
@@ -127,7 +127,8 @@ impl RequestActions {
             container.custom_actions.push(super::layout::CustomDrawActions::SetEditingTo(container.edited_part));
         };
         if self.edited_part_requires_update {
-            container.custom_actions.push(super::layout::CustomDrawActions::VideoPreviewResize(false));
+            container.custom_actions.push(super::layout::CustomDrawActions::SetVideoPreviewActive(false));
+            container.custom_actions.push(super::layout::CustomDrawActions::SetVideoPreviewActive(true));
         };
     }
 }

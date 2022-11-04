@@ -26,7 +26,7 @@ pub fn parse(str: &str, path: &PathBuf) -> Result<Project, ParserError> {
     };
     // return
     match (proj, vid) {
-        (Some(proj), Some(vid)) => Ok(Project { proj, vid: VideoWithAutoCache::new(vid), }),
+        (Some(proj), Some(vid)) => Ok(Project { proj: std::sync::Arc::new(std::sync::Mutex::new(proj)), vid: std::sync::Arc::new(std::sync::Mutex::new(vid)), }),
         (None, _) => Err(ParserError::MissingIdentifier(format!("proj"))),
         (_, None) => Err(ParserError::MissingIdentifier(format!("vid"))),
     }
@@ -36,7 +36,7 @@ fn parse_proj(chars: &mut Chars, path: PathBuf) -> Result<ProjectData, ParserErr
     Ok(ProjectData {
         name: format!("doesn't_matter"),
         path: Some(path),
-        render_settings_export: Some(crate::video_render_settings::VideoRenderSettings::perfect_with_caching()), // TODO: This is a default value - project metadata should also be saved in the project file!
+        render_settings_export: Some(crate::video_render_settings::VideoRenderSettings::export()), // TODO: This is a default value - project metadata should also be saved in the project file!
     })
 }
 

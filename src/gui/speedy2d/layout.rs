@@ -80,10 +80,12 @@ pub struct UserInput<'a> {
 }
 
 pub enum CustomDrawActions {
-    /// (false) sets the resolution of all video previews to 0x0 and adds (true) for the next frame. (true) restores the resolution. This causes the background thread to drop its old cache (i have no idea why, but it works, so i don't really care right now)
-    VideoPreviewResize(bool),
+    /// tells the video preview background thread to pause/resume operation.
+    SetVideoPreviewActive(bool),
     /// Some(index) indicates that something is to be edited, while None indicates the opposite.
     SetEditingTo(Option<u32>),
+    /// Made changes to the video
+    ChangedVideo,
 }
 impl<'a> UserInput<'a> {
     pub fn new_no_actions(owned: UserInputOwned<'a>, clonable: UserInputClonable, custom_actions_next: &'a mut Vec<CustomDrawActions>) -> UserInput<'a> {

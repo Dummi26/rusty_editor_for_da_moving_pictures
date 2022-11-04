@@ -1,10 +1,12 @@
 use std::path::PathBuf;
 
-use crate::{multithreading::automatically_cache_frames::VideoWithAutoCache, video_render_settings::VideoRenderSettings};
+use std::sync::{Arc, Mutex};
+use crate::{video::Video, video_render_settings::VideoRenderSettings};
 
+#[derive(Clone)]
 pub struct Project {
-    pub proj: ProjectData,
-    pub vid: VideoWithAutoCache,
+    pub proj: Arc<Mutex<ProjectData>>,
+    pub vid: Arc<Mutex<Video>>,
 }
 pub struct ProjectData {
     pub name: String,

@@ -116,13 +116,16 @@ impl QuickCommandsHandler {
         }
         cmds
     }
-    pub fn set_new_query(&mut self, new_query: String) {
+    pub fn set_new_query(&self, new_query: String) {
         self.sender.send(QctSendable::SetQuery(new_query)).unwrap();
     }
-    pub fn set_editing(&mut self, new_editing: Option<u32>) {
+    pub fn set_editing(&self, new_editing: Option<u32>) {
         self.sender.send(QctSendable::SetEditing(new_editing)).unwrap();
     }
-    pub fn exec_query(&mut self, query_index: Option<usize>) {
+    pub fn vid_updated(&self) {
+        self.sender.send(QctSendable::VidUpdated).unwrap();
+    }
+    pub fn exec_query(&self, query_index: Option<usize>) {
         self.sender.send(QctSendable::ExecQuery(query_index)).unwrap();
     }
 
@@ -153,6 +156,7 @@ impl QuickCommandsHandler {
                                 edited_part = editing2;
                                 new_editing = true;
                             },
+                            QctSendable::VidUpdated => new_editing = true,
                             QctSendable::ExecQuery(query_index) => {
                                 let command = if let Some(query_index) = query_index {
                                     if let Some(command) = possible_commands.get(query_index) {
@@ -322,6 +326,7 @@ enum QctSendable {
     Stop,
     SetQuery(String),
     SetEditing(Option<u32>),
+    VidUpdated,
     /// If None, executes the query, if Some(n), executes the nth autocompletion.
     ExecQuery(Option<usize>),
 }

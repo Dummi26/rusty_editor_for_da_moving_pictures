@@ -18,7 +18,6 @@ pub fn main(args: crate::cli::CustomArgs) -> crate::cli::CustomArgs {
     match speedy2d::Window::new_centered("rusty editor for da moving pictures", (1280, 720)) {
         Ok(window) => {
             let mut window_handler = EditorWindowHandler::new(&args);
-            window_handler.start_caching_thread();
             window.run_loop(window_handler)
         },
         Err(err) => panic!("\n{}{}\n", Clz::error_info("Error creating window with speedy2d: "), Clz::error_details(err.to_string().as_str())),
@@ -49,7 +48,7 @@ struct EditorWindowHandler {
     keyboard_modifiers_state: speedy2d::window::ModifiersState,
     keyboard_down_buttons_scancode: HashMap<u32, u8>,
     keyboard_down_buttons_virtualkeycode: HashMap<speedy2d::window::VirtualKeyCode, u8>,
-    
+
     layout: EditorWindowLayoutContent,
     custom_actions: Vec<CustomDrawActions>,
 }
@@ -106,10 +105,10 @@ impl EditorWindowHandler {
     pub fn new(args: &crate::cli::CustomArgs) -> Self {
         fn project_gen_new_empty() -> Project {
             Project {
-                proj: crate::project::ProjectData { name: "Unnamed project".to_string(), path: None, render_settings_export: None, },
-                vid: crate::multithreading::automatically_cache_frames::VideoWithAutoCache::new(crate::video::Video::new_full(
+                proj: std::sync::Arc::new(std::sync::Mutex::new(crate::project::ProjectData { name: "Unnamed project".to_string(), path: None, render_settings_export: None, })),
+                vid: std::sync::Arc::new(std::sync::Mutex::new(crate::video::Video::new_full(
                     crate::video::VideoType::new(crate::video::VideoTypeEnum::List(Vec::new()))
-                )),
+                ))),
             }
         }
         let mut project = match &args.project_path {
@@ -146,7 +145,6 @@ impl EditorWindowHandler {
                 project_gen_new_empty()
             }
         };
-        project.vid.cache();
 
         let mut assets_manager = AssetsManager::default();
         assets_manager.assets_path = args.assets_path.clone();
@@ -194,8 +192,8 @@ impl EditorWindowHandler {
                         [
                             content::video_preview::VideoPreview::new(project.vid.clone()).as_enum(),
                             content::layout::half::Half::new([
-                                content::video_tree::VideoTree::new(project.vid.get_vid_mutex_arc().clone()).as_enum(),
-                                content::video_properties_editor::VideoPropertiesEditor::new(project.vid.get_vid_mutex_arc().clone()).as_enum()
+                                content::video_tree::VideoTree::new(project.vid.clone()).as_enum(),
+                                content::video_properties_editor::VideoPropertiesEditor::new(project.vid.clone()).as_enum()
                             ], true, 0.4
                             ).as_enum()
                         ], false, 0.8
@@ -206,12 +204,6 @@ impl EditorWindowHandler {
             ).as_enum(),
             project,
         }
-    }
-}
-
-impl EditorWindowHandler {
-    pub fn start_caching_thread(&mut self) {
-        self.project.vid.cache();
     }
 }
 
@@ -543,7 +535,7 @@ impl WindowHandler for EditorWindowHandler {
                                 content::layout::half::Half::new([
                                     content::special::qvidrunner::QVidRunner::new(content::special::qvidrunner::QVidRunnerMode::Normal,
                                         self.edited_part,
-                                        self.project.vid.get_vid_mutex_arc().clone(),
+                                        self.project.vid.clone(),
                                     ).as_enum(),
                                     layout,
                                 ], true, 0.0).as_enum()

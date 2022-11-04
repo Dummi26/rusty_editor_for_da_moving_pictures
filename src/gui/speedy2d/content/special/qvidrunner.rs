@@ -50,8 +50,9 @@ impl EditorWindowLayoutContentTrait for QVidRunner {
         if let Some(actions) = input.get_custom_actions() {
             for action in actions {
                 match action {
-                    crate::gui::speedy2d::layout::CustomDrawActions::VideoPreviewResize(_) => {},
+                    crate::gui::speedy2d::layout::CustomDrawActions::SetVideoPreviewActive(_) => {},
                     crate::gui::speedy2d::layout::CustomDrawActions::SetEditingTo(editing) => self.command_handler.set_editing(*editing),
+                    crate::gui::speedy2d::layout::CustomDrawActions::ChangedVideo => self.command_handler.vid_updated(),
                 }
             }
         }
