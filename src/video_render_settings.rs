@@ -9,8 +9,8 @@ pub struct VideoRenderSettings {
 impl VideoRenderSettings {
     /// This is mostly used for the preview.
     pub fn preview() -> Self { Self {
-        max_distance_when_retrieving_closest_frame: 120,
-        image_scaling_filter_type: FilterType::Nearest,
+        max_distance_when_retrieving_closest_frame: 0,
+        image_scaling_filter_type: FilterType::Gaussian,
     } }
     /// This is used for final render. It prevents inaccuracies.
     pub fn export() -> Self { Self {

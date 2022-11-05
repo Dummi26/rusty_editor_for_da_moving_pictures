@@ -48,7 +48,7 @@ impl QuickCommandsHandler {
                 ),
                 "vid" => crate::video::VideoTypeEnum::Raw(
                     if let Some(rest) = command_rest {
-                        match crate::content::input_video::InputVideo::new_from_directory_full_of_frames(rest.into()) {
+                        match crate::content::input_video::InputVideo::new_from_directory_full_of_frames(rest.into(), (0, 0, true)) {
                             Ok(v) => v,
                             Err(e) => {
                                 return Err(format!("Could not create video: {:?}", e));

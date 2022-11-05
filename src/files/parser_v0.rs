@@ -57,7 +57,19 @@ fn parse_vid(chars: &mut Chars) -> Result<Video, ParserError> {
         };
         match identifier.as_str() {
             "" => break 'before_return,
-            "pos" => pos = Some(Pos { x: parse_vid_curve(chars)?, y: parse_vid_curve(chars)?, w: parse_vid_curve(chars)?, h: parse_vid_curve(chars)?, }),
+            "pos" => pos = Some(Pos { align: match chars.next() { None => return Err(ParserError::UnexpectedEOF),
+                Some('^') => crate::video::PosAlign::Top,
+                Some('v') => crate::video::PosAlign::Bottom,
+                Some('<') => crate::video::PosAlign::Left,
+                Some('>') => crate::video::PosAlign::Right,
+                Some('+') => crate::video::PosAlign::Center,
+                Some('1') => crate::video::PosAlign::TopLeft,
+                Some('2') => crate::video::PosAlign::TopRight,
+                Some('3') => crate::video::PosAlign::BottomLeft,
+                Some('4') => crate::video::PosAlign::BottomRight,
+                Some('!') => crate::video::PosAlign::Custom(parse_vid_curve(chars)?, parse_vid_curve(chars)?),
+                Some(c) => return Err(ParserError::InvalidPosAlignment(c)),
+            }, x: parse_vid_curve(chars)?, y: parse_vid_curve(chars)?, w: parse_vid_curve(chars)?, h: parse_vid_curve(chars)?, }),
             "start" => start = Some(parse_vid_f64(chars)?),
             "length" => length = Some(parse_vid_f64(chars)?),
             "video" => video = Some(parse_vid_video(chars)?),
@@ -210,8 +222,33 @@ fn parse_vid_video(chars: &mut Chars) -> Result<VideoType, ParserError> {
                     None => return Err(ParserError::UnexpectedEOF),
                 };
             };
+            let crop = {
+                let mut first = String::new();
+                let mut second = String::new();
+                let mut rev = None;
+                loop {
+                    match chars.next() {
+                        Some('-') => if rev.is_none() { rev = Some(false); },
+                        Some('+') => if rev.is_none() { rev = Some(true); },
+                        Some(';') => break,
+                        Some(c) => match rev {
+                            None => first.push(c),
+                            Some(_) => second.push(c),
+                        },
+                        None => return Err(ParserError::UnexpectedEOF),
+                    }
+                };
+                if let Some(rev) = rev {
+                    // TODO: better errors (not just parse int error)?
+                    let frame1: u32 = match first.parse() { Ok(v) => v, Err(e) => return Err(ParserError::ParseIntError("Could not parse video's first frame!".to_string(), e)) };
+                    let frame2: u32 = match second.parse() { Ok(v) => v, Err(e) => return Err(ParserError::ParseIntError("Could not parse video's end frame!".to_string(), e)) };
+                    (frame1, frame2, rev)
+                } else {
+                    return Err(ParserError::VideoFileFailedToParseStartOrEndFrame("the two numbers were not separated by a + or - symbol. (';' too early)".to_string()));
+                }
+            };
             VideoTypeEnum::Raw(
-                match InputVideo::new_from_directory_full_of_frames(directory.clone()) {
+                match InputVideo::new_from_directory_full_of_frames(directory.clone(), crop) {
                     Ok(v) => v,
                     Err(err) => return Err(ParserError::DirectoryWithImagesNotFound(directory, err)),
                 }
@@ -225,7 +262,7 @@ fn parse_vid_curve(chars: &mut Chars) -> Result<Curve, ParserError> {
     Ok(loop { break match chars.next() {
         Some(char) => match char {
             ' ' | '\t' => continue,
-            '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | '.' => Curve::Constant(parse_vid_f64_prepend(String::from(char), chars)?),
+            '-' | '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | '.' => Curve::Constant(parse_vid_f64_prepend(String::from(char), chars)?),
             '/' => Curve::Linear(parse_vid_curve(chars)?.b(), parse_vid_curve(chars)?.b()),
             's' => Curve::SmoothFlat(parse_vid_curve(chars)?.b(), parse_vid_curve(chars)?.b()),
             '#' => Curve::Chain(

@@ -92,7 +92,7 @@ impl Content for Video {
 impl Video {
     pub fn new_full(video: VideoType) -> Self {
         Self {
-            set_pos: Pos { x: Curve::Constant(0.0), y: Curve::Constant(0.0), w: Curve::Constant(1.0), h: Curve::Constant(1.0) },
+            set_pos: Pos { align: PosAlign::Center, x: Curve::Constant(0.5), y: Curve::Constant(0.5), w: Curve::Constant(1.0), h: Curve::Constant(1.0) },
             set_start_frame: 0.0,
             set_length: 1.0,
             video,
@@ -103,7 +103,7 @@ impl Video {
     }
     pub fn new_full_size(start_frame: f64, length: f64, video: VideoType) -> Self {
         Self {
-            set_pos: Pos { x: Curve::Constant(0.0), y: Curve::Constant(0.0), w: Curve::Constant(1.0), h: Curve::Constant(1.0) },
+            set_pos: Pos { align: PosAlign::Center, x: Curve::Constant(0.5), y: Curve::Constant(0.5), w: Curve::Constant(1.0), h: Curve::Constant(1.0) },
             set_start_frame: start_frame,
             set_length: length,
             video,
@@ -152,7 +152,8 @@ impl Video {
     /// Between prep_draw and draw, effects can make some changes to the PrepDrawData.
     pub fn draw(&mut self, img: &mut DynamicImage, prep_data: PrepDrawData, render_settings: &VideoRenderSettings) {
         //
-        let pos = Pos { x: (prep_data.position.x * img.width() as f64).round() as i32, y: (prep_data.position.y * img.height() as f64).round() as i32, w: (prep_data.position.w * img.width() as f64).round() as u32, h: (prep_data.position.h * img.height() as f64).round() as u32 };
+        let pos_xy = prep_data.position.top_left_xy();
+        let pos = Pos { align: PosAlign::TopLeft, x: (pos_xy.0 * img.width() as f64).round() as i32, y: (pos_xy.1 * img.height() as f64).round() as i32, w: (prep_data.position.w * img.width() as f64).round() as u32, h: (prep_data.position.h * img.height() as f64).round() as u32 };
         //
         self.draw2(img, prep_data, pos, render_settings);
     }
@@ -291,13 +292,14 @@ impl Video {
 
 
 
-
+    /// Assumes align is set to TopLeft!
     fn get_inner_pos(pos_outer: &Pos<i32, u32>, pos_inner: &Pos<f64, f64>) -> Pos<i32, u32> {
         Pos {
             x: pos_outer.x + (pos_outer.w as f64 * pos_inner.x).round() as i32,
             y: pos_outer.x + (pos_outer.h as f64 * pos_inner.y).round() as i32,
             w: (pos_outer.w as f64 * pos_inner.w).round() as u32,
             h: (pos_outer.h as f64 * pos_inner.h).round() as u32,
+            align: PosAlign::TopLeft,
         }
     }
 }
@@ -427,17 +429,69 @@ pub struct Pos<T, U> where T: Sized + Clone, U: Sized + Clone {
     pub y: T,
     pub w: U,
     pub h: U,
+    pub align: PosAlign<T>,
 }
-impl<T, U> Pos<T, U> where T: Clone, U: Clone {
-    pub fn convert<A, F>(&self, converter: &F) -> Pos<A, A> where F: Fn(&T) -> A + Fn(&U) -> A, A: Clone {
-        self.convert_sep(converter, converter)
-    }
-    pub fn convert_sep<A, B, F, G>(&self, converter1: F, converter2: G) -> Pos<A, B> where F: Fn(&T) -> A, G: Fn(&U) -> B, A: Clone, B: Clone {
-        Pos {
-            x: converter1(&self.x),
-            y: converter1(&self.y),
-            w: converter2(&self.w),
-            h: converter2(&self.h),
+#[derive(Clone, Copy)]
+pub enum PosAlign<T> {
+    TopLeft,
+    Top,
+    TopRight,
+    Left,
+    Center,
+    Right,
+    BottomLeft,
+    Bottom,
+    BottomRight,
+    Custom(T, T),
+}
+impl<T> PosAlign<T> {
+    fn convert<U, F>(&self, converter: F) -> PosAlign<U> where F: Fn(&T) -> U {
+        match self {
+            PosAlign::TopLeft => PosAlign::TopLeft,
+            PosAlign::Top => PosAlign::Top,
+            PosAlign::TopRight => PosAlign::TopRight,
+            PosAlign::Left => PosAlign::Left,
+            PosAlign::Center => PosAlign::Center,
+            PosAlign::Right => PosAlign::Right,
+            PosAlign::BottomLeft => PosAlign::BottomLeft,
+            PosAlign::Bottom => PosAlign::Bottom,
+            PosAlign::BottomRight => PosAlign::BottomRight,
+            PosAlign::Custom(a, b) => PosAlign::Custom(converter(a), converter(b)),
         }
+    }
+}
+
+impl<T, U> Pos<T, U> where T: Clone, U: Clone {
+    /// Converts all values from T or U to A, including the ones in self.align
+    pub fn convert<A, F>(&self, converter: &F) -> Pos<A, A>
+    where F: Fn(&T) -> A + Fn(&U) -> A, A: Clone {
+        self.convert_sep(converter, converter, |c| c.convert(converter))
+    }
+
+    pub fn convert_sep<A, B, F, G, H>(&self, converter_pos: F, converter_dimen: G, converter_align: H) -> Pos<A, B>
+    where F: Fn(&T) -> A, G: Fn(&U) -> B, H: Fn(&PosAlign<T>) -> PosAlign<A>, A: Clone, B: Clone {
+        Pos {
+            x: converter_pos(&self.x),
+            y: converter_pos(&self.y),
+            w: converter_dimen(&self.w),
+            h: converter_dimen(&self.h),
+            align: converter_align(&self.align),
+        }
+    }
+}
+
+impl Pos<f64, f64> {
+    pub fn top_left_xy(&self) -> (f64, f64) {
+        (match self.align {
+            PosAlign::TopLeft | PosAlign::Left | PosAlign::BottomLeft => self.x, // left
+            PosAlign::Top | PosAlign::Center | PosAlign::Bottom => self.x - self.w / 2.0, // mid
+            PosAlign::TopRight | PosAlign::Right | PosAlign::BottomRight => self.x - self.w, // right
+            PosAlign::Custom(v, _) => self.x - v * self.w,
+        }, match self.align {
+            PosAlign::TopLeft | PosAlign::Top | PosAlign::TopRight => self.y, // top
+            PosAlign::Left | PosAlign::Center | PosAlign::Right => self.y - self.h / 2.0, // mid
+            PosAlign::BottomLeft | PosAlign::Bottom | PosAlign::BottomRight => self.y - self.h, // bottom
+            PosAlign::Custom(_, v) => self.y - v * self.h,
+        })
     }
 }
