@@ -7,7 +7,9 @@ use super::super::layout::{EditorWindowLayoutContentTrait, EditorWindowLayoutCon
 pub struct VideoPreview {
     time_created: std::time::Instant,
     video: VideoWithAutoCache,
+    video_position: (f32, f32, f32, f32),
     progress: f64,
+    mouse_pos: Option<(f32, f32)>,
     mouse_on_progress_bar: Option<f64>,
     mouse_left_button_down_started_on_progress_bar: bool,
     layout_content_data: EditorWindowLayoutContentData,
@@ -18,7 +20,8 @@ impl VideoPreview {
         Self {
             time_created: std::time::Instant::now(),
             video: VideoWithAutoCache::start(vid),
-            progress: 0.0, mouse_on_progress_bar: None, mouse_left_button_down_started_on_progress_bar: false,
+            video_position: (0.0, 0.0, 1.0, 0.95),
+            progress: 0.0, mouse_pos: None, mouse_on_progress_bar: None, mouse_left_button_down_started_on_progress_bar: false,
             layout_content_data: EditorWindowLayoutContentData::default(),
             size: (0, 0, None),
         }
@@ -93,14 +96,14 @@ impl VideoPreview {
             } else {
                 None
             }
-        } else if self.size.0 != position.2 as u32 || self.size.1 != (position.3 * 0.95) as u32 {
+        } else if self.size.0 != position.2 as u32 || self.size.1 != (position.3 * self.video_position.3) as u32 {
             self.size.2 = Some((position.2, position.3, std::time::Instant::now()));
             None
         } else {
             None
         };
         if let Some(size) = resized {
-            let (new_width, new_height) = (size.0 as u32, (size.1 * 0.95) as u32);
+            let (new_width, new_height) = ((size.0 * self.video_position.2) as u32, (size.1 * self.video_position.3) as u32);
             if self.size.0 != new_width || self.size.1 != new_height {
                 self.size = (new_width, new_height, None);
                 self.video.set_width_and_height(new_width, new_height);
@@ -113,7 +116,12 @@ impl VideoPreview {
             let img = &self.video.shared.lock().unwrap().frame;
             if let Some(img) = img {
                 let handle = graphics.create_image_from_raw_pixels(ImageDataType::RGB, ImageSmoothingMode::NearestNeighbor, Vector2::new(img.width(), img.height()), img.as_bytes()).unwrap();
-                graphics.draw_rectangle_image_tinted(Rectangle::new(Vector2::new(position.0, position.1), Vector2::new(position.0 + position.2, position.1 + position.3 * 0.95)), Color::from_rgba(1.0, 1.0, 1.0, visibility), &handle);
+                let x = position.0 + self.video_position.0 * position.2;
+                let y = position.1 + self.video_position.1 * position.3;
+                let w = self.video_position.2 * position.2;
+                let h = self.video_position.3 * position.3;
+                graphics.draw_rectangle_image_tinted(Rectangle::new(Vector2::new(x, y), Vector2::new(x + w, y + h)), Color::from_rgba(1.0, 1.0, 1.0, visibility), &handle);
+                    // 0.95
             }
         }
 
@@ -196,6 +204,7 @@ impl EditorWindowLayoutContentTrait for VideoPreview {
             InputAction::Mouse(action) => match action {
                 crate::gui::speedy2d::layout::MouseAction::Moved => {
                     let mouse_pos = input.clonable.mouse_pos;
+                    self.mouse_pos = Some(mouse_pos);
                     fn on_progress_bar(mouse_pos: (f32, f32)) -> bool {
                         (mouse_pos.1 - 0.97).abs() <= 0.02 && mouse_pos.0 >= 0.05 && mouse_pos.0 <= 0.95
                     }
