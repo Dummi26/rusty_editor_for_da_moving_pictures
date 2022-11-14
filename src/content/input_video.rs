@@ -8,7 +8,7 @@ pub struct InputVideo {
     /// FrameData: raw image data for all given frames.
     /// Option<i8>: For every frame, if this is 0, the frame is available and ready to be used. If it is positive, the nearest available frame is n entries further down the vec. If it is negative, the same thing applies, but in the opposite direction. If it is none, there is no value close enough.
     frames_image_data: Vec<(Option<i8>, crate::content::image::Image)>,
-    /// The first frame, (the last frame, false) or (how many frames to remove from the end, true) - default: (0, 0, true)
+    /// The first frame, (the last frame (excl), false) or (how many frames to remove from the end, true) - default: (0, 0, true)
     crop: (u32, u32, bool),
     generic_content_data: crate::content::content::GenericContentData,
     pub as_content_changes: InputVideoChanges,
@@ -62,7 +62,7 @@ impl InputVideo {
         Ok(Self {
             images_directory: images_directory,
             frames_image_data,
-            crop: (0, 0, true),
+            crop,
             as_content_changes: InputVideoChanges::default(),
             generic_content_data: crate::content::content::GenericContentData::default(),
         })
@@ -70,7 +70,11 @@ impl InputVideo {
 }
 impl InputVideo {
     pub fn get_length(&self) -> usize {
-        self.frames_image_data.len()
+        if self.crop.2 {
+            self.frames_image_data.len() - self.crop.0 as usize - self.crop.1 as usize
+        } else {
+            (self.crop.1 - self.crop.0) as usize
+        }
     }
     pub fn get_dir(&self) -> &PathBuf { &self.images_directory }
     /// Equivalent to get_frame_fast with max_frames_distance = 0.
@@ -80,7 +84,7 @@ impl InputVideo {
     /// If there is a frame that has already been loaded near the current frame, use that frame instead. DO NOT USE THIS FOR RENDERING THE FINAL VIDEO - IT WILL SKIP FRAMES WHENEVER IT POSSIBLY CAN! Returns None when there are no frames available (frames_image_data.is_empty()).
     pub fn get_frame_fast<'a>(&'a mut self, progress: f64, max_frames_distance: i8) -> Option<&'a mut crate::content::image::Image> {
         if self.frames_image_data.is_empty() { return None; };
-        let mut index = ((self.get_length()-1) as f64 * progress).round() as usize;
+        let mut index = self.crop.0 as usize + ((self.get_length()-1) as f64 * progress).round() as usize;
         let offset = self.frames_image_data[index].0;
         if if let Some(o) = offset {
             let o_abs = o.abs();

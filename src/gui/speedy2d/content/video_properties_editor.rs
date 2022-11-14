@@ -603,6 +603,7 @@ impl EditorWindowLayoutContentTrait for VideoPropertiesEditor {
                             if is_new_vid {
                                 self.tabs = match &new_vid.video.vt {
                                     VideoTypeEnum::List(_) => vec![Some(Box::new(EtGeneral::new())), Some(Box::new(EtPlaceholder::new()))/*ExtraTabsInfo::ListEdit*/, Some(Box::new(EtListAdd::new()))/*ExtraTabsInfo::ListAdd*/],
+                                    VideoTypeEnum::AspectRatio(..) => vec![Some(Box::new(EtGeneral::new())), Some(Box::new(EtPlaceholder::new()))/*width*/, Some(Box::new(EtPlaceholder::new()))/*height*/],
                                     VideoTypeEnum::WithEffect(_, _) => vec![Some(Box::new(EtGeneral::new()))],
                                     VideoTypeEnum::Image(img) => vec![Some(Box::new(EtGeneral::new())), Some(Box::new(EtPath::new_path(img.path().clone())))/*ExtraTabsInfo::ImagePath(img.path().clone(), false)*/],
                                     VideoTypeEnum::Raw(_) => vec![Some(Box::new(EtGeneral::new()))],
@@ -917,6 +918,7 @@ impl VideoPropertiesEditor {
                         let mut s = "Editing: ".to_string(); s.push_str(
                         match &vid.video.vt {
                             VideoTypeEnum::List(_) => "List",
+                            VideoTypeEnum::AspectRatio(..) => "AspectRatio",
                             VideoTypeEnum::WithEffect(_, _) => "Effect",
                             VideoTypeEnum::Image(_) => "Image",
                             VideoTypeEnum::Raw(_) => "Video",

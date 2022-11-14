@@ -206,9 +206,11 @@ impl VideoTree {
         fn vid_to_str(vid: &Video) -> String {
             match &vid.video.vt {
                 crate::video::VideoTypeEnum::List(_) => format!("List"),
+                crate::video::VideoTypeEnum::AspectRatio(_, w, h) => format!("AspectRatio"),
                 crate::video::VideoTypeEnum::WithEffect(_, e) => format!("Effect: {}", match &e.effect {
                     effect::effects::EffectsEnum::Nothing(_) => format!("Nothing"),
                     effect::effects::EffectsEnum::BlackWhite(_) => format!("BlackWhite"),
+                    effect::effects::EffectsEnum::Rotate(_) => format!("Rotate: [?]"),
                     effect::effects::EffectsEnum::Shake(e) => format!("Shake ({}x{}, {}x{})", e.shake_dist_x, e.shakes_count_x, e.shake_dist_y, e.shakes_count_y),
                     effect::effects::EffectsEnum::ChangeSpeed(_) => format!("ChangeSpeed"),
                     effect::effects::EffectsEnum::ColorAdjust(e) => format!("ColorAdjust: {}", match &e.mode { effect::effects::ColorAdjust_Mode::Rgba(..) => "rgba", }),

@@ -17,3 +17,7 @@
   4 - video properties editor: improve performance (got worse after switching from an enum to dyn)
  ?5 - Make all draw methods be draw(&self) instead of draw(&mut self), caching would be in Arc<Mutex<_>>s and multithreaded rendering would just work
   3 - Make the video properties editor's path tab work with other things that have a path (not just images)
+
+Current:
+
+Add "Rotate" effect

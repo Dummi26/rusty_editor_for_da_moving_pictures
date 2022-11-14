@@ -298,6 +298,7 @@ impl QuickCommandsHandler {
 enum EditingPartAbstract {
     None,
     List { length: usize, },
+    AspectRatio { vid: Box<Self>, width: crate::curve::Curve, height: crate::curve::Curve, },
     WithEffect { effect: (), contained: Box<Self>, },
     Image { path: std::path::PathBuf, },
     Video { path: std::path::PathBuf, },
@@ -305,6 +306,7 @@ enum EditingPartAbstract {
 impl From<&crate::video::Video> for EditingPartAbstract { fn from(vid: &crate::video::Video) -> Self {
     match &vid.video.vt {
         crate::video::VideoTypeEnum::List(vec) => Self::List { length: vec.len(), },
+        crate::video::VideoTypeEnum::AspectRatio(v, w, h) => Self::AspectRatio { vid: Box::new(v.as_ref().into()), width: w.clone(), height: h.clone() },
         crate::video::VideoTypeEnum::WithEffect(contained, _effect) => Self::WithEffect { effect: () /* TODO */, contained: Box::new(contained.as_ref().into()), },
         crate::video::VideoTypeEnum::Image(img) => Self::Image { path: img.path().clone(), },
         crate::video::VideoTypeEnum::Raw(vid) => Self::Video { path: vid.get_dir().clone() },

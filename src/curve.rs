@@ -7,6 +7,8 @@ pub enum Curve {
     SmoothFlat(BCurve, BCurve),
     /// Chains multiple Curves together. Obviously, the curve's values should be the same at the points where they meet, but this is not strictly necessary. The f64 values in the tuple are the length for the corresponding curve. If their sum is less than 1, the end will use the value the final curve returned for 1.
     Chain(Vec<(Curve, f64)>),
+    Program(std::path::PathBuf),
+    // ProgramPersistent((), ), // TODO!
 }
 impl Clone for Curve { fn clone(&self) -> Self { match self {
     Curve::Constant(a) => Curve::Constant(a.clone()),
@@ -19,6 +21,7 @@ impl Clone for Curve { fn clone(&self) -> Self { match self {
         };
         nvec
     }),
+    Curve::Program(p) => Curve::Program(p.clone()),
 } } }
 
 pub struct BCurve {
@@ -58,6 +61,15 @@ impl Curve {
                 let x2 = x2.c.get_value(progress);
                 let factor = -2.0 * progress * progress * progress + 3.0 * progress * progress;
                 x1 + (x2 - x1) * factor
+            },
+            Self::Program(p) => {
+                let txt = String::from_utf8(
+                    std::process::Command::new(p)
+                        .arg(format!("{}", progress).as_str())
+                        .output().unwrap().stdout
+                ).expect("Program output was not valid UTF-8");
+                let txt = txt.split('\n').next().unwrap();
+                txt.parse().expect(format!("Program output could not be parsed into a float: '{}'", txt).as_str())
             },
         }
     }

@@ -17,7 +17,7 @@ pub fn export_to_dir(proj: &Project, settings: &crate::video_export_settings::Vi
         }
         if let Some(prep_data) = vid.prep_draw(progress) {
             let mut img = DynamicImage::new_rgba8(settings.width, settings.height);
-            vid.draw(&mut img, prep_data, match &proj.proj.lock().unwrap().render_settings_export {
+            vid.draw(&mut img, prep_data, match &mut proj.proj.lock().unwrap().render_settings_export {
                 Some(v) => v,
                 None => panic!("\n{}\n",
                     Clz::error_info("The project you are trying to export does not specify any export settings. Please configure the project's export configuration and try again."),

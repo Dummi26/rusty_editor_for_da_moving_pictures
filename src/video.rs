@@ -34,6 +34,7 @@ impl Content for Video {
     fn children(&self) -> Vec<&Self> {
         match &self.video.vt {
             VideoTypeEnum::List(vec) => vec.iter().collect(),
+            VideoTypeEnum::AspectRatio(v, _, _) => vec![v.as_ref()],
             VideoTypeEnum::WithEffect(v, _) => vec![v.as_ref()],
             VideoTypeEnum::Image(_) |
             VideoTypeEnum::Raw(_) => Vec::new(),
@@ -42,6 +43,7 @@ impl Content for Video {
     fn children_mut(&mut self) -> Vec<&mut Self> {
         match &mut self.video.vt {
             VideoTypeEnum::List(vec) => vec.iter_mut().collect(),
+            VideoTypeEnum::AspectRatio(v, _, _) => vec![v.as_mut()],
             VideoTypeEnum::WithEffect(v, _) => vec![v.as_mut()],
             VideoTypeEnum::Image(_) |
             VideoTypeEnum::Raw(_) => Vec::new(),
@@ -150,15 +152,17 @@ pub struct PrepDrawData {
 impl Video {
     /// This may only be called after prep_draw (which is why it consumes PrepDrawData).
     /// Between prep_draw and draw, effects can make some changes to the PrepDrawData.
-    pub fn draw(&mut self, img: &mut DynamicImage, prep_data: PrepDrawData, render_settings: &VideoRenderSettings) {
+    pub fn draw(&mut self, img: &mut DynamicImage, prep_data: PrepDrawData, render_settings: &mut VideoRenderSettings) {
         //
         let pos_xy = prep_data.position.top_left_xy();
         let pos = Pos { align: PosAlign::TopLeft, x: (pos_xy.0 * img.width() as f64).round() as i32, y: (pos_xy.1 * img.height() as f64).round() as i32, w: (prep_data.position.w * img.width() as f64).round() as u32, h: (prep_data.position.h * img.height() as f64).round() as u32 };
+        render_settings.this_frame.my_size.0 *= prep_data.position.w;
+        render_settings.this_frame.my_size.1 *= prep_data.position.h;
         //
         self.draw2(img, prep_data, pos, render_settings);
     }
 
-    fn draw2(&mut self, image: &mut DynamicImage, prep_data: PrepDrawData, pos: Pos<i32, u32>, render_settings: &VideoRenderSettings) {
+    fn draw2(&mut self, image: &mut DynamicImage, prep_data: PrepDrawData, pos: Pos<i32, u32>, render_settings: &mut VideoRenderSettings) {
 
         let progress = prep_data.progress;
 
@@ -239,7 +243,7 @@ impl Video {
 
 
     /// This function does not put the image into the cache automatically. To do that, use self.last_draw.add_frame(?, ?, ?, create_rendered_image(...))
-    fn create_rendered_image(&mut self, pos: &Pos<i32, u32>, progress: f64, render_settings: &VideoRenderSettings) -> DynamicImage {
+    fn create_rendered_image(&mut self, pos: &Pos<i32, u32>, progress: f64, render_settings: &mut VideoRenderSettings) -> DynamicImage {
         let mut img = DynamicImage::new_rgba8(pos.w, pos.h);
         self.draw3(progress, render_settings, &mut img); // draw onto this image
         img
@@ -247,7 +251,7 @@ impl Video {
 
 
     /// crop: new min x and y (0 if not cropped), new right and bottom bounds (original width and height if not cropped or only cropped on left and/or top, otherwise width or height minus cropped pixels)
-    fn draw3(&mut self, progress: f64, render_settings: &VideoRenderSettings, image: &mut DynamicImage) {
+    fn draw3(&mut self, progress: f64, render_settings: &mut VideoRenderSettings, image: &mut DynamicImage) {
 
         match &mut self.video.vt {
 
@@ -286,6 +290,21 @@ impl Video {
 
 
 
+            VideoTypeEnum::AspectRatio(vid, width, height) => {
+                if let Some(mut prep_draw) = vid.prep_draw(progress) {
+                    let my_aspect_ratio = render_settings.this_frame.my_size.0 / render_settings.this_frame.my_size.0;
+                    let desired_aspect_ratio = width.get_value(progress) / height.get_value(progress);
+                    if my_aspect_ratio > desired_aspect_ratio { // too wide
+                        prep_draw.position.w = desired_aspect_ratio / my_aspect_ratio;
+                    } else if my_aspect_ratio < desired_aspect_ratio { // too high
+                        prep_draw.position.h = my_aspect_ratio / desired_aspect_ratio;
+                    }
+                    vid.draw(image, prep_draw, render_settings);
+                };
+            },
+
+
+
         };
     }
 
@@ -312,12 +331,14 @@ pub struct VideoType {
 } }
 pub enum VideoTypeEnum {
     List(Vec<Video>),
+    AspectRatio(Box<Video>, Curve, Curve),
     WithEffect(Box<Video>, crate::effect::Effect),
     Image(crate::content::image::Image),
     Raw(crate::content::input_video::InputVideo),
 }
 pub enum VideoTypeChanges {
     List(Vec<VideoTypeChanges_List>),
+    AspectRatio(Option<Box<VideoChanges>>, Option<Curve>, Option<Curve>),
     WithEffect(Option<Box<VideoChanges>>, Option<crate::effect::Effect>),
     Image(ImageChanges),
     Raw(InputVideoChanges),
@@ -345,6 +366,7 @@ impl Content for VideoType {
                 };
                 nvec
             }),
+            VideoTypeEnum::AspectRatio(v, width, height) => VideoTypeEnum::AspectRatio(Box::new(v.clone_no_caching()), width.clone(), height.clone()),
             VideoTypeEnum::WithEffect(v, e) => VideoTypeEnum::WithEffect(Box::new(v.clone_no_caching()), e.clone_no_caching()),
             VideoTypeEnum::Image(img) => VideoTypeEnum::Image(img.clone_no_caching()),
             VideoTypeEnum::Raw(v) => VideoTypeEnum::Raw(v.clone_no_caching()),
@@ -378,6 +400,20 @@ impl Content for VideoType {
                     };
                     true
                 },
+                (VideoTypeChanges::AspectRatio(vid_changes, width, height), VideoTypeEnum::AspectRatio(v, w, h)) => {
+                    let mut out = true;
+                    if let Some(changes) = vid_changes {
+                        v.as_content_changes = *changes;
+                        if !v.apply_changes() { out = false; };
+                    }
+                    if let Some(width) = width {
+                        *w = width;
+                    }
+                    if let Some(height) = height {
+                        *h = height;
+                    }
+                    out
+                },
                 (VideoTypeChanges::WithEffect(vid_changes, eff_new), VideoTypeEnum::WithEffect(vid, eff)) => {
                     let mut out = true;
                     if let Some(changes) = vid_changes {
@@ -406,11 +442,13 @@ impl Content for VideoType {
                     Clz::error_details("Tried to apply changes of type "), Clz::error_cause(match changes {
                         VideoTypeChanges::ChangeType(_) => "[?]",
                         VideoTypeChanges::List(_) => "List",
+                        VideoTypeChanges::AspectRatio(_, _, _) => "AspectRatio",
                         VideoTypeChanges::WithEffect(_, _) => "WithEffect",
                         VideoTypeChanges::Image(_) => "Image",
                         VideoTypeChanges::Raw(_) => "Video",
                     }), Clz::error_details(" to data of type "), Clz::error_cause(match data {
                         VideoTypeEnum::List(_) => "List",
+                        VideoTypeEnum::AspectRatio(_, _, _) => "AspectRatio",
                         VideoTypeEnum::WithEffect(_, _) => "WithEffect",
                         VideoTypeEnum::Image(_) => "Image",
                         VideoTypeEnum::Raw(_) => "Video",

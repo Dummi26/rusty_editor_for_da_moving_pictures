@@ -66,7 +66,7 @@ impl VideoWithAutoCache {
                             {
                                 let mut vid = vid.lock().unwrap();
                                 if let Some(prep_data) = vid.prep_draw(progress) {
-                                    vid.draw(img.as_mut(), prep_data, &crate::video_render_settings::VideoRenderSettings::preview());
+                                    vid.draw(img.as_mut(), prep_data, &mut crate::video_render_settings::VideoRenderSettings::preview());
                                     frames_count += 1;
                                 };
                             };

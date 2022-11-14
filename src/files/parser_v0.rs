@@ -122,6 +122,10 @@ fn parse_vid_video(chars: &mut Chars) -> Result<VideoType, ParserError> {
         "List" => {
             VideoTypeEnum::List(parse_vid_vids(chars)?)
         },
+        "AspectRatio" => {
+            let (w, h) = (parse_vid_curve(chars)?, parse_vid_curve(chars)?);
+            VideoTypeEnum::AspectRatio(Box::new(parse_vid(chars)?), w, h)
+        },
         "WithEffect" => {
             let video_data = parse_vid(chars)?;
             let effect_name = {
@@ -240,8 +244,8 @@ fn parse_vid_video(chars: &mut Chars) -> Result<VideoType, ParserError> {
                 };
                 if let Some(rev) = rev {
                     // TODO: better errors (not just parse int error)?
-                    let frame1: u32 = match first.parse() { Ok(v) => v, Err(e) => return Err(ParserError::ParseIntError("Could not parse video's first frame!".to_string(), e)) };
-                    let frame2: u32 = match second.parse() { Ok(v) => v, Err(e) => return Err(ParserError::ParseIntError("Could not parse video's end frame!".to_string(), e)) };
+                    let frame1: u32 = match first.parse() { Ok(v) => v, Err(e) => return Err(ParserError::ParseIntError(first, e)) };
+                    let frame2: u32 = match second.parse() { Ok(v) => v, Err(e) => return Err(ParserError::ParseIntError(second, e)) };
                     (frame1, frame2, rev)
                 } else {
                     return Err(ParserError::VideoFileFailedToParseStartOrEndFrame("the two numbers were not separated by a + or - symbol. (';' too early)".to_string()));
@@ -281,6 +285,17 @@ fn parse_vid_curve(chars: &mut Chars) -> Result<Curve, ParserError> {
                     vec
                 }
             ),
+            '!' => Curve::Program({
+                let mut path = String::new();
+                loop {
+                    match chars.next() {
+                        None => return Err(ParserError::UnexpectedEOF),
+                        Some('\\') => break,
+                        Some(ch) => path.push(ch),
+                    }
+                }
+                std::path::PathBuf::from(path)
+            }),
             _ => return Err(ParserError::InvalidCurveIdentifier(char)),
         },
         None => return Err(ParserError::UnexpectedEOF),
