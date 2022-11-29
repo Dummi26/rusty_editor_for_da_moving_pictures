@@ -9,27 +9,26 @@ pub struct VideoRenderSettings {
 }
 impl VideoRenderSettings {
     /// This is mostly used for the preview.
-    pub fn preview() -> Self { Self {
+    pub fn preview(this_frame: FrameRenderInfo) -> Self { Self {
         max_distance_when_retrieving_closest_frame: 0,
         image_scaling_filter_type: FilterType::Gaussian,
-        this_frame: Default::default(),
+        this_frame,
     } }
     /// This is used for final render. It prevents inaccuracies.
-    pub fn export() -> Self { Self {
+    pub fn export(this_frame: FrameRenderInfo) -> Self { Self {
         max_distance_when_retrieving_closest_frame: 0,
         image_scaling_filter_type: FilterType::Gaussian,
-        this_frame: Default::default(),
+        this_frame,
     } }
-    pub fn new_frame(&mut self) {
-        self.this_frame = Default::default();
-    }
 }
 
 pub struct FrameRenderInfo {
     pub my_size: (f64, f64),
+    pub out_vid_aspect_ratio: f64,
 }
-impl Default for FrameRenderInfo {
-    fn default() -> Self { Self {
+impl FrameRenderInfo {
+    pub fn new(out_vid_aspect_ratio: f64) -> Self { Self {
         my_size: (1.0, 1.0),
+        out_vid_aspect_ratio,
     } }
 }

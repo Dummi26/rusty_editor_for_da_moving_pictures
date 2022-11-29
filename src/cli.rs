@@ -29,11 +29,13 @@ pub struct CustomArgs {
     pub action: Option<Action>,
     pub export_options: Option<crate::video_export_settings::VideoExportSettings>,
     pub assets_path: Option<PathBuf>,
+    pub cli_colored_output_disabled: bool,
 }
 
 #[derive(Debug)]
 pub enum Action {
     OpenProjectInGui,
+    OpenProjectInCli,
     ExportProjectToFrames,
     Exit,
 }
@@ -51,6 +53,7 @@ impl CustomArgs {
             "action" => match arg.len() - 1 {
                 1 => self.action = Some(match arg[1].as_str() {
                     "OpenProjectInGui" => Action::OpenProjectInGui,
+                    "OpenProjectInCli" => Action::OpenProjectInCli,
                     "ExportProjectToFrames" => Action::ExportProjectToFrames,
                     ac => panic!("\n{}{}{}\n    {}\n    {}\n",
                         Clz::error_info("Invalid action '"), Clz::error_cause(ac), Clz::error_info("'! [action] in --action [action] may only be one of the following:"),
@@ -105,11 +108,18 @@ impl CustomArgs {
                     Clz::error_info("Please specify a file following the assets-dir option!"),
                 ),
             },
-            invalid_arg => panic!("\n{} {} {}\n    {} {}\n    {} {}\n    {} {}\n{}\n",
+            "cli-nocolor" => match arg.len() - 1 {
+                0 => self.cli_colored_output_disabled = true,
+                _ => panic!("\n{}\n",
+                    Clz::error_info("cli-nocolor takes no arguments!"),
+                ),
+            },
+            invalid_arg => panic!("\n{} {} {}\n    {} {}\n    {} {}\n    {} {}\n    {}\n{}\n",
                 Clz::error_info("--arg"), Clz::error_cause(invalid_arg), Clz::error_info("is invalid. Valid args are:"),
                 Clz::error_info("proj-path"), Clz::error_info("[path]"),
                 Clz::error_info("action"), Clz::error_info("[action]"),
                 Clz::error_info("assets-dir"), Clz::error_info("[dir]"),
+                Clz::error_info("cli-nocolor"),
                 Clz::error_info("To use these: --[arg] [...], for example: '--proj-path \"/path/to/file.txt\"'."),
             ),
         };

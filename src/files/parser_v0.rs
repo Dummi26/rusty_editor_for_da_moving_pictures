@@ -36,7 +36,7 @@ fn parse_proj(chars: &mut Chars, path: PathBuf) -> Result<ProjectData, ParserErr
     Ok(ProjectData {
         name: format!("doesn't_matter"),
         path: Some(path),
-        render_settings_export: Some(crate::video_render_settings::VideoRenderSettings::export()), // TODO: This is a default value - project metadata should also be saved in the project file!
+        render_settings_export: Some(crate::video_render_settings::VideoRenderSettings::export(crate::video_render_settings::FrameRenderInfo::new(1.0))), // TODO: This is a default value - project metadata should also be saved in the project file!
     })
 }
 

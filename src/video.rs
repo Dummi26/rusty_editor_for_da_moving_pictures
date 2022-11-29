@@ -292,7 +292,8 @@ impl Video {
 
             VideoTypeEnum::AspectRatio(vid, width, height) => {
                 if let Some(mut prep_draw) = vid.prep_draw(progress) {
-                    let my_aspect_ratio = render_settings.this_frame.my_size.0 / render_settings.this_frame.my_size.0;
+                    let my_aspect_ratio = render_settings.this_frame.out_vid_aspect_ratio
+                        * render_settings.this_frame.my_size.0 / render_settings.this_frame.my_size.0;
                     let desired_aspect_ratio = width.get_value(progress) / height.get_value(progress);
                     if my_aspect_ratio > desired_aspect_ratio { // too wide
                         prep_draw.position.w = desired_aspect_ratio / my_aspect_ratio;

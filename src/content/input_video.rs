@@ -45,6 +45,9 @@ impl InputVideo {
     pub fn new() -> Self {
         Self { images_directory: PathBuf::new(), frames_image_data: Vec::new(), crop: (0, 0, true), generic_content_data: super::content::GenericContentData::default(), as_content_changes: InputVideoChanges::default(), }
     }
+
+    // ffmpeg -ss 00:01:00 -i ~/Videos/wat.mp4 -frames:v 1 /tmp/video/frame.png
+
     /// You can use "ffmpeg -i vids/video.mp4 path/%09d.png" or something similar to generate such a directory. Make sure the path ends in the path separator (likely \ on windows and / on unix)! | crop default is (0, 0, true)!
     pub fn new_from_directory_full_of_frames(images_directory: PathBuf, crop: (u32, u32, bool)) -> Result<Self, io::Error> {
         let dir_files_iter = fs::read_dir(&images_directory)?;

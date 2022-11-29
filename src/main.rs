@@ -27,6 +27,7 @@ fn main() {
                 args.action = Some(cli::Action::Exit);
                 match action {
                     cli::Action::OpenProjectInGui => gui::main(args),
+                    cli::Action::OpenProjectInCli => gui::main_cli(args),
                     cli::Action::ExportProjectToFrames => export_to_frames(args),
                     cli::Action::Exit => break,
                 }
