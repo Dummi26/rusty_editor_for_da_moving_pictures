@@ -1,8 +1,10 @@
 use speedy2d::{dimen::Vector2, color::Color, image::{ImageDataType, ImageSmoothingMode}, shape::Rectangle};
 
-use crate::{Clz, multithreading::automatically_cache_frames::VideoWithAutoCache, gui::speedy2d::{layout::{CustomDrawActions, InputAction, EditorWindowLayoutContentData}, content_list::EditorWindowLayoutContentEnum}};
+use crate::{multithreading::automatically_cache_frames::VideoWithAutoCache, gui::speedy2d::{layout::{CustomDrawActions, InputAction, EditorWindowLayoutContentData}, content_list::EditorWindowLayoutContentEnum}};
 
 use super::super::layout::{EditorWindowLayoutContentTrait, EditorWindowLayoutContentDrawMode, EditorWindowLayoutContentSDrawMode};
+
+use speedy2d::font::TextLayout;
 
 pub struct VideoPreview {
     time_created: std::time::Instant,
@@ -12,6 +14,7 @@ pub struct VideoPreview {
     mouse_pos: Option<(f32, f32)>,
     mouse_on_progress_bar: Option<f64>,
     mouse_left_button_down_started_on_progress_bar: bool,
+    draw_extra_info: bool,
     layout_content_data: EditorWindowLayoutContentData,
     size: (u32, u32, Option<(f32, f32, std::time::Instant)>),
 }
@@ -22,12 +25,19 @@ impl VideoPreview {
             video: VideoWithAutoCache::start(vid),
             video_position: (0.0, 0.0, 1.0, 0.95),
             progress: 0.0, mouse_pos: None, mouse_on_progress_bar: None, mouse_left_button_down_started_on_progress_bar: false,
+            draw_extra_info: false,
             layout_content_data: EditorWindowLayoutContentData::default(),
             size: (0, 0, None),
         }
     }
 }
 impl VideoPreview {
+    fn get_pos_in_video(&self, pos: (f32, f32)) -> (f32, f32) {
+        (
+            (pos.0 - self.video_position.0) / self.video_position.2,
+            (pos.1 - self.video_position.1) / self.video_position.3
+        )
+    }
     fn draw_type_preview(&mut self, moving /* 0.0 = no, 1.0 = yes */: f32, visibility: f32, graphics: &mut speedy2d::Graphics2D, position: &(f32, f32, f32, f32)) {
         let line_color = Color::from_rgba(1.0 - moving, 1.0 - moving, 1.0, visibility);
         let left = position.0 + 0.5;
@@ -84,7 +94,7 @@ impl VideoPreview {
         );
     }
     /// Visibility: 1.0 = normal, 0.0 = invisible, smoothly going from 1.0 to 0.0 => fade out.
-    fn draw_type_normal(&mut self, graphics: &mut speedy2d::Graphics2D, position: &(f32, f32, f32, f32), visibility: f32) {
+    fn draw_type_normal(&mut self, graphics: &mut speedy2d::Graphics2D, position: &(f32, f32, f32, f32), visibility: f32, draw_opts: &mut crate::gui::speedy2d::layout::EditorWindowLayoutContentDrawOptions) {
         let resized = if let Some(size) = &mut self.size.2 {
             if size.0 != position.2 || size.1 != position.3 {
                 size.0 = position.2;
@@ -136,6 +146,44 @@ impl VideoPreview {
         let progress_bar_pos_x = position.0 + progress_bar_space_on_side + progress_bar_width * self.progress as f32;
         graphics.draw_line(Vector2::new(position.0 + progress_bar_space_on_side, progress_bar_line_y), Vector2::new(progress_bar_pos_x, progress_bar_line_y), visibility, Color::CYAN);
         graphics.draw_line(Vector2::new(progress_bar_pos_x, progress_bar_line_y), Vector2::new(position.0 + progress_bar_space_on_side + progress_bar_width, progress_bar_line_y), visibility, Color::BLUE);
+        // extra info
+        'draw_extra_info: {
+            if self.draw_extra_info {
+                let pos = match self.mouse_pos {
+                    Some((x, y)) => (x, y),
+                    None => (0.5, 0.5),
+                };
+                let mouse = Vector2 { x: position.0 + pos.0 * position.2, y: position.1 + pos.1 * position.3 };
+                let margins = 5.0;
+                let pos_in_video = self.get_pos_in_video(pos);
+                let txt = draw_opts.assets_manager.get_default_font().layout_text(
+                    format!(
+                        "Time: {}\nPos: {} | {}",
+                        self.progress,
+                        pos_in_video.0, pos_in_video.1
+                    ).as_str(),
+                    15.0, speedy2d::font::TextOptions::new());
+                let (w, h) = (txt.width(), txt.height());
+                let mut x1 = mouse.x.max(position.0);
+                let mut y1 = (mouse.y - margins - h - margins).max(position.1);
+                let mut x2 = x1 + margins + w + margins;
+                let mut y2 = y1 + margins + h + margins;
+                if x2 > position.0 + position.2 {
+                    let diff = x2 - position.0 - position.2;
+                    x2 -= diff;
+                    x1 -= diff;
+                    if x1 < position.0 { break 'draw_extra_info; }
+                }
+                if y2 > position.1 + position.3 {
+                    let diff = y2 - position.1 - position.3;
+                    y2 -= diff;
+                    y1 -= diff;
+                    if y1 < position.1 { break 'draw_extra_info; }
+                }
+                graphics.draw_rectangle(Rectangle::new(Vector2 { x: x1, y: y1 }, Vector2 { x: x2, y: y2 }), Color::from_rgba(0.2, 0.2, 0.3, 0.75));
+                graphics.draw_text(Vector2 { x: x1 + margins, y: y1 + margins }, Color::from_rgb(1.0, 1.0, 1.0), &txt);
+            }
+        }
     }
 }
 impl EditorWindowLayoutContentTrait for VideoPreview {
@@ -162,10 +210,10 @@ impl EditorWindowLayoutContentTrait for VideoPreview {
         if draw_opts.force_redraw_due_to_resize {
             //self.update_with_resolution(self.size.0, self.size.1);
         };
-        match &draw_opts.draw_mode {
+        match &draw_opts.draw_mode.clone() {
             EditorWindowLayoutContentDrawMode::Static(mode) => match mode {
                 EditorWindowLayoutContentSDrawMode::Normal => {
-                    self.draw_type_normal(graphics, position, draw_opts.visibility);
+                    self.draw_type_normal(graphics, position, draw_opts.visibility, draw_opts);
                 },
                 EditorWindowLayoutContentSDrawMode::TypePreview { moving } => {
                     self.draw_type_preview(if *moving { 1.0 } else { 0.0 }, draw_opts.visibility, graphics, position)
@@ -174,14 +222,14 @@ impl EditorWindowLayoutContentTrait for VideoPreview {
             EditorWindowLayoutContentDrawMode::Transition { modes, prog } => {
                 match modes {
                     [EditorWindowLayoutContentSDrawMode::Normal, EditorWindowLayoutContentSDrawMode::Normal] => {
-                        self.draw_type_normal(graphics, position, draw_opts.visibility);
+                        self.draw_type_normal(graphics, position, draw_opts.visibility, draw_opts);
                     },
                     [EditorWindowLayoutContentSDrawMode::Normal, EditorWindowLayoutContentSDrawMode::TypePreview { moving }] => {
-                        self.draw_type_normal(graphics, position, (1.0 - prog) * draw_opts.visibility);
+                        self.draw_type_normal(graphics, position, (1.0 - prog) * draw_opts.visibility, draw_opts);
                         self.draw_type_preview(if *moving { 1.0 } else { 0.0 }, prog * draw_opts.visibility, graphics, position);
                     },
                     [EditorWindowLayoutContentSDrawMode::TypePreview { moving }, EditorWindowLayoutContentSDrawMode::Normal] => {
-                        self.draw_type_normal(graphics, position, prog * draw_opts.visibility);
+                        self.draw_type_normal(graphics, position, prog * draw_opts.visibility, draw_opts);
                         self.draw_type_preview(if *moving { 1.0 } else { 0.0 }, (1.0 - prog) * draw_opts.visibility, graphics, position);
                     },
                     [EditorWindowLayoutContentSDrawMode::TypePreview { moving: moving_old, }, EditorWindowLayoutContentSDrawMode::TypePreview { moving: moving_new, }] => {
@@ -199,6 +247,7 @@ impl EditorWindowLayoutContentTrait for VideoPreview {
     }
 
     fn handle_input_custom(&mut self, _draw_opts: &mut crate::gui::speedy2d::layout::EditorWindowLayoutContentDrawOptions, input: &mut crate::gui::speedy2d::layout::UserInput) {
+        self.draw_extra_info = input.owned.keyboard_modifiers_state.shift();
         match &input.owned.action {
             InputAction::None => (),
             InputAction::Mouse(action) => match action {
