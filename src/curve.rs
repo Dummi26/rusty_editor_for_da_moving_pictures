@@ -44,17 +44,16 @@ impl Curve {
                 let dif = end.c.get_value(progress) - start;
                 start + dif * progress
             },
-            Self::Chain(chain) => {
-                let mut out_progress = 0.0;
-                let mut total_progress = 0.0;
-                for curve in chain {
-                    if total_progress + curve.1 > progress {
-                        out_progress = curve.0.get_value((progress - total_progress).min(1.0) / curve.1);
-                        break;
-                    };
-                    total_progress += curve.1;
-                };
-                out_progress
+            Self::Chain(chain) => 'get_from_chain: {
+                for i in 0..chain.len() {
+                    let this = &chain[i];
+                    let (curve, start) = this;
+                    let end = match chain.get(i + 1) { Some(v) => v.1, None => 1.0 };
+                    if end > progress {
+                        break 'get_from_chain curve.get_value((progress - start) / (end - start));
+                    }
+                }
+                match chain.last() { Some(last) => last.0.get_value(1.0), None => 1.0 }
             },
             Self::SmoothFlat(x1, x2) => {
                 let x1 = x1.c.get_value(progress);
