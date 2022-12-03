@@ -332,7 +332,7 @@ impl Video {
                 if let Some(mut prep_draw) = vid.prep_draw(progress) {
                     let my_aspect_ratio = render_settings.this_frame.out_vid_aspect_ratio
                         * (render_settings.this_frame.my_size.0/* * prep_draw.position.w*/) / (render_settings.this_frame.my_size.1/* * prep_draw.position.h*/);
-                    println!("My AR: {}", my_aspect_ratio);
+                    // println!("My AR: {}", my_aspect_ratio);
                     let desired_aspect_ratio = width.get_value(progress) / height.get_value(progress);
                     let (anchor_x, anchor_y) = prep_draw.position.align.get_anchor(0.0, 0.5, 1.0);
                     if my_aspect_ratio > desired_aspect_ratio { // too wide
