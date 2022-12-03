@@ -25,6 +25,11 @@ pub struct VideoChanges {
     pub start: Option<f64>,
     pub length: Option<f64>,
     pub video: Option<VideoTypeChanges>,
+    pub wrap: Option<VideoChangesWrapWith>,
+}
+pub enum VideoChangesWrapWith {
+    List,
+    AspectRatio(Curve, Curve),
 }
 impl Content for Video {
     fn clone_no_caching(&self) -> Self {
@@ -36,8 +41,10 @@ impl Content for Video {
             VideoTypeEnum::List(vec) => vec.iter().collect(),
             VideoTypeEnum::AspectRatio(v, _, _) => vec![v.as_ref()],
             VideoTypeEnum::WithEffect(v, _) => vec![v.as_ref()],
+            VideoTypeEnum::Text(_) |
             VideoTypeEnum::Image(_) |
-            VideoTypeEnum::Raw(_) => Vec::new(),
+            VideoTypeEnum::Raw(_) |
+            VideoTypeEnum::Ffmpeg(_) => Vec::new(),
         }
     }
     fn children_mut(&mut self) -> Vec<&mut Self> {
@@ -45,13 +52,16 @@ impl Content for Video {
             VideoTypeEnum::List(vec) => vec.iter_mut().collect(),
             VideoTypeEnum::AspectRatio(v, _, _) => vec![v.as_mut()],
             VideoTypeEnum::WithEffect(v, _) => vec![v.as_mut()],
+            VideoTypeEnum::Text(_) |
             VideoTypeEnum::Image(_) |
-            VideoTypeEnum::Raw(_) => Vec::new(),
+            VideoTypeEnum::Raw(_) |
+            VideoTypeEnum::Ffmpeg(_) => Vec::new(),
+            
         }
     }
     
     fn has_changes(&self) -> bool {
-        self.as_content_changes.pos.is_some() | self.as_content_changes.start.is_some() | self.as_content_changes.length.is_some() | self.as_content_changes.video.is_some()
+        self.as_content_changes.pos.is_some() | self.as_content_changes.start.is_some() | self.as_content_changes.length.is_some() | self.as_content_changes.video.is_some() | self.as_content_changes.wrap.is_some()
     }
     fn apply_changes(&mut self) -> bool {
         let mut out = false;
@@ -85,6 +95,18 @@ impl Content for Video {
             if !self.video.apply_changes() { err = true; };
             out = true;
         };
+        if let Some(wrap) = self.as_content_changes.wrap.take() {
+            match wrap {
+                VideoChangesWrapWith::List => {
+                    let me = std::mem::replace(&mut self.video, VideoType::new(VideoTypeEnum::List(vec![])));
+                    if let VideoTypeEnum::List(l) = &mut self.video.vt { l.push(Video::new_full(me)); }
+                }
+                VideoChangesWrapWith::AspectRatio(w, h) => {
+                    let me = std::mem::replace(&mut self.video, VideoType::new(VideoTypeEnum::List(vec![])));
+                    self.video = VideoType::new(VideoTypeEnum::AspectRatio(Box::new(Video::new_full(me)), w, h));
+                },
+            }
+        }
         out && !err
 
     }
@@ -156,10 +178,13 @@ impl Video {
         //
         let pos_xy = prep_data.position.top_left_xy();
         let pos = Pos { align: PosAlign::TopLeft, x: (pos_xy.0 * img.width() as f64).round() as i32, y: (pos_xy.1 * img.height() as f64).round() as i32, w: (prep_data.position.w * img.width() as f64).round() as u32, h: (prep_data.position.h * img.height() as f64).round() as u32 };
+        let prev_frame = render_settings.this_frame.my_size;
         render_settings.this_frame.my_size.0 *= prep_data.position.w;
         render_settings.this_frame.my_size.1 *= prep_data.position.h;
         //
         self.draw2(img, prep_data, pos, render_settings);
+        // reset
+        render_settings.this_frame.my_size = prev_frame;
     }
 
     fn draw2(&mut self, image: &mut DynamicImage, prep_data: PrepDrawData, pos: Pos<i32, u32>, render_settings: &mut VideoRenderSettings) {
@@ -264,11 +289,24 @@ impl Video {
                     img.draw(image, render_settings.image_scaling_filter_type);
                 };
             },
-            
-            
-            
+
+
+
+            VideoTypeEnum::Ffmpeg(vid) => {
+                vid.load_img_force_factor(progress);
+                vid.draw(image, render_settings.image_scaling_filter_type)
+            },
+
+
+
             VideoTypeEnum::Image(img) => {
-                img.draw(image, render_settings.image_scaling_filter_type);
+                img.draw(image, render_settings.image_scaling_filter_type)
+            },
+
+
+
+            VideoTypeEnum::Text(txt) => {
+                txt.draw(image, progress)
             },
 
 
@@ -293,12 +331,20 @@ impl Video {
             VideoTypeEnum::AspectRatio(vid, width, height) => {
                 if let Some(mut prep_draw) = vid.prep_draw(progress) {
                     let my_aspect_ratio = render_settings.this_frame.out_vid_aspect_ratio
-                        * render_settings.this_frame.my_size.0 / render_settings.this_frame.my_size.0;
+                        * (render_settings.this_frame.my_size.0/* * prep_draw.position.w*/) / (render_settings.this_frame.my_size.1/* * prep_draw.position.h*/);
+                    println!("My AR: {}", my_aspect_ratio);
                     let desired_aspect_ratio = width.get_value(progress) / height.get_value(progress);
+                    let (anchor_x, anchor_y) = prep_draw.position.align.get_anchor(0.0, 0.5, 1.0);
                     if my_aspect_ratio > desired_aspect_ratio { // too wide
-                        prep_draw.position.w = desired_aspect_ratio / my_aspect_ratio;
+                        let w = desired_aspect_ratio / my_aspect_ratio; // < 1
+                        let x = (1.0 - w) * anchor_x;
+                        prep_draw.position.w *= w;
+                        prep_draw.position.x = x + prep_draw.position.x * w;
                     } else if my_aspect_ratio < desired_aspect_ratio { // too high
-                        prep_draw.position.h = my_aspect_ratio / desired_aspect_ratio;
+                        let h = my_aspect_ratio / desired_aspect_ratio; // < 1
+                        let y = (1.0 - h) * anchor_y;
+                        prep_draw.position.h *= h;
+                        prep_draw.position.y = y + prep_draw.position.y * h;
                     }
                     vid.draw(image, prep_draw, render_settings);
                 };
@@ -334,15 +380,19 @@ pub enum VideoTypeEnum {
     List(Vec<Video>),
     AspectRatio(Box<Video>, Curve, Curve),
     WithEffect(Box<Video>, crate::effect::Effect),
+    Text(crate::content::text::Text),
     Image(crate::content::image::Image),
     Raw(crate::content::input_video::InputVideo),
+    Ffmpeg(crate::content::ffmpeg_vid::FfmpegVid),
 }
 pub enum VideoTypeChanges {
     List(Vec<VideoTypeChanges_List>),
     AspectRatio(Option<Box<VideoChanges>>, Option<Curve>, Option<Curve>),
     WithEffect(Option<Box<VideoChanges>>, Option<crate::effect::Effect>),
+    Text(crate::content::text::TextChanges),
     Image(ImageChanges),
     Raw(InputVideoChanges),
+    Ffmpeg(super::content::ffmpeg_vid::FfmpegVidChanges),
     ChangeType(VideoTypeEnum),
 }
 
@@ -369,8 +419,10 @@ impl Content for VideoType {
             }),
             VideoTypeEnum::AspectRatio(v, width, height) => VideoTypeEnum::AspectRatio(Box::new(v.clone_no_caching()), width.clone(), height.clone()),
             VideoTypeEnum::WithEffect(v, e) => VideoTypeEnum::WithEffect(Box::new(v.clone_no_caching()), e.clone_no_caching()),
+            VideoTypeEnum::Text(t) => VideoTypeEnum::Text(t.clone_no_caching()),
             VideoTypeEnum::Image(img) => VideoTypeEnum::Image(img.clone_no_caching()),
             VideoTypeEnum::Raw(v) => VideoTypeEnum::Raw(v.clone_no_caching()),
+            VideoTypeEnum::Ffmpeg(v) => VideoTypeEnum::Ffmpeg(v.clone_no_caching()),
         })
     }
     
@@ -445,14 +497,18 @@ impl Content for VideoType {
                         VideoTypeChanges::List(_) => "List",
                         VideoTypeChanges::AspectRatio(_, _, _) => "AspectRatio",
                         VideoTypeChanges::WithEffect(_, _) => "WithEffect",
+                        VideoTypeChanges::Text(_) => "Text",
                         VideoTypeChanges::Image(_) => "Image",
                         VideoTypeChanges::Raw(_) => "Video",
+                        VideoTypeChanges::Ffmpeg(_) => "ffmpeg",
                     }), Clz::error_details(" to data of type "), Clz::error_cause(match data {
                         VideoTypeEnum::List(_) => "List",
                         VideoTypeEnum::AspectRatio(_, _, _) => "AspectRatio",
                         VideoTypeEnum::WithEffect(_, _) => "WithEffect",
+                        VideoTypeEnum::Text(_) => "Text",
                         VideoTypeEnum::Image(_) => "Image",
                         VideoTypeEnum::Raw(_) => "Video",
+                        VideoTypeEnum::Ffmpeg(_) => "ffmpeg",
                     }), Clz::error_details(".")
                 ),
             }
@@ -496,6 +552,21 @@ impl<T> PosAlign<T> {
             PosAlign::Bottom => PosAlign::Bottom,
             PosAlign::BottomRight => PosAlign::BottomRight,
             PosAlign::Custom(a, b) => PosAlign::Custom(converter(a), converter(b)),
+        }
+    }
+    /// a is 0, b is 1/2, c is 1
+    fn get_anchor(&self, a: T, b: T, c: T) -> (T, T) where T: Clone {
+        match self {
+            PosAlign::TopLeft => (a.clone(), a),
+            PosAlign::Top => (b, a),
+            PosAlign::TopRight => (c, a),
+            PosAlign::Left => (a, b),
+            PosAlign::Center => (b.clone(), b),
+            PosAlign::Right => (c, b),
+            PosAlign::BottomLeft => (a, c),
+            PosAlign::Bottom => (b, c),
+            PosAlign::BottomRight => (c.clone(), c),
+            PosAlign::Custom(x, y) => (x.clone(), y.clone()),
         }
     }
 }

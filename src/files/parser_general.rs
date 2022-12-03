@@ -31,6 +31,8 @@ pub enum ParserError {
     /// Attempted to parse a curve, but found an unexpected character.
     InvalidCurveIdentifier(char),
 
+    /// Invalid type for a text
+    InvalidTextType(char),
     VideoFileFailedToParseStartOrEndFrame(String),
 
     /// This name does not identify an effect.
@@ -42,6 +44,9 @@ pub enum ParserError {
     ParseIntError(String, ParseIntError),
     /// Failed to parse string into a float.
     ParseFloatError(String, ParseFloatError),
+
+    /// When no other error type matches
+    Todo
 }
 impl Display for ParserError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -56,12 +61,14 @@ impl Display for ParserError {
             Self::DirectoryWithImagesNotFound(d, e) => format!("Directory with images was not found. Dir: \"{}\", Err: \"{e}\"", d.display()),
             Self::InvalidTransparencyAdjustmentIdentifier(i) => format!("Invalid transparency adjustment identifier '{i}'. Only = (force), * (factor), and L (fully opaque unless fully transparent) are allowed. (= and * must be followed by Curves.)"),
             Self::InvalidCurveIdentifier(c) => format!("Found unexpected character '{c}' when parsing Curve. Allowed are only 0-9, '.', '/', 's', and '#'."),
+            Self::InvalidTextType(c) => format!("Found unexpected text type character '{c}'. Use 's' for static text."),
             Self::VideoFileFailedToParseStartOrEndFrame(t) => format!("Failed to parse a video's start and end frames (crop): {t}"),
             Self::UnknownEffect(e) => format!("Effect '{e}' does not exist! Try None (placeholder), BlackWhite, Shake, ChangeSpeed, Blur, ColorAdjust or ColorKey."),
             Self::EffectParseError { effect_identifier, custom_error } => format!("Failed to parse effect '{effect_identifier}', Err: \"{custom_error}\""),
             Self::ParseIntError(i, e) => format!("Failed to parse '{i}' into an int. Err: {e}"),
             Self::ParseFloatError(i, e) => format!("Failed to parse '{i}' into a float. Err: {e}"),
             Self::InvalidPosAlignment(c) => format!("Failed to get alignment of position: First char after 'pos:' was {c}, but only 1^2<+>3v4 are allowed."),
+            Self::Todo => format!("There was an error, but no error message has been implemented yet."),
         }.as_str())
     }
 }

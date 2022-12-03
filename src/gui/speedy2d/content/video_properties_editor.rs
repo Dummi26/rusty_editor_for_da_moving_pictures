@@ -198,7 +198,7 @@ struct EtTime {
                                 1 => self.start = ((mouse_pos.0 as f64 - 0.05) / 0.9).max(0.0).min(self.end),
                                 2 => self.end = ((mouse_pos.0 as f64 - 0.05) / 0.9).max(self.start).min(1.0),
                                 3 => {
-                                    supr.data().requests.push(EditorWindowLayoutRequest::EditingChangesApply(VideoChanges { pos: None, start: Some(self.start), length: Some(self.end - self.start), video: None, }));
+                                    supr.data().requests.push(EditorWindowLayoutRequest::EditingChangesApply(VideoChanges { pos: None, start: Some(self.start), length: Some(self.end - self.start), video: None, wrap: None }));
                                 },
                                 _ => (),
                             };
@@ -368,7 +368,7 @@ struct EtListAdd {
                             _ => None,
                         };
                         if let Some(inner_changes) = inner_changes {
-                            let changes = VideoChanges { pos: None, start: None, length: None, video: Some(VideoTypeChanges::List(vec![inner_changes])), };
+                            let changes = VideoChanges { pos: None, start: None, length: None, video: Some(VideoTypeChanges::List(vec![inner_changes])), wrap: None };
                             supr.data().requests.push(EditorWindowLayoutRequest::EditingChangesApply(changes));
                         };
                     };
@@ -605,8 +605,10 @@ impl EditorWindowLayoutContentTrait for VideoPropertiesEditor {
                                     VideoTypeEnum::List(_) => vec![Some(Box::new(EtGeneral::new())), Some(Box::new(EtPlaceholder::new()))/*ExtraTabsInfo::ListEdit*/, Some(Box::new(EtListAdd::new()))/*ExtraTabsInfo::ListAdd*/],
                                     VideoTypeEnum::AspectRatio(..) => vec![Some(Box::new(EtGeneral::new())), Some(Box::new(EtPlaceholder::new()))/*width*/, Some(Box::new(EtPlaceholder::new()))/*height*/],
                                     VideoTypeEnum::WithEffect(_, _) => vec![Some(Box::new(EtGeneral::new()))],
+                                    VideoTypeEnum::Text(_) => vec![Some(Box::new(EtGeneral::new())), Some(Box::new(EtPlaceholder::new()))],
                                     VideoTypeEnum::Image(img) => vec![Some(Box::new(EtGeneral::new())), Some(Box::new(EtPath::new_path(img.path().clone())))/*ExtraTabsInfo::ImagePath(img.path().clone(), false)*/],
-                                    VideoTypeEnum::Raw(_) => vec![Some(Box::new(EtGeneral::new()))],
+                                    VideoTypeEnum::Raw(_) => vec![Some(Box::new(EtGeneral::new())), Some(Box::new(EtPlaceholder::new()))],
+                                    VideoTypeEnum::Ffmpeg(_) => vec![Some(Box::new(EtGeneral::new())), Some(Box::new(EtPlaceholder::new()))],
                                 };
                             } else {
                                 let mut tabs = std::mem::replace(&mut self.tabs, Vec::new());
@@ -920,8 +922,10 @@ impl VideoPropertiesEditor {
                             VideoTypeEnum::List(_) => "List",
                             VideoTypeEnum::AspectRatio(..) => "AspectRatio",
                             VideoTypeEnum::WithEffect(_, _) => "Effect",
+                            VideoTypeEnum::Text(_) => "Text",
                             VideoTypeEnum::Image(_) => "Image",
                             VideoTypeEnum::Raw(_) => "Video",
+                            VideoTypeEnum::Ffmpeg(_) => "ffmpeg",
                         });
                         s
                     },

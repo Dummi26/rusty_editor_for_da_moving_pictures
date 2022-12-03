@@ -206,7 +206,7 @@ impl VideoTree {
         fn vid_to_str(vid: &Video) -> String {
             match &vid.video.vt {
                 crate::video::VideoTypeEnum::List(_) => format!("List"),
-                crate::video::VideoTypeEnum::AspectRatio(_, w, h) => format!("AspectRatio"),
+                crate::video::VideoTypeEnum::AspectRatio(_, _w, _h) => format!("AspectRatio"),
                 crate::video::VideoTypeEnum::WithEffect(_, e) => format!("Effect: {}", match &e.effect {
                     effect::effects::EffectsEnum::Nothing(_) => format!("Nothing"),
                     effect::effects::EffectsEnum::BlackWhite(_) => format!("BlackWhite"),
@@ -217,8 +217,12 @@ impl VideoTree {
                     effect::effects::EffectsEnum::Blur(e) => format!("Blur: {}", match &e.mode { effect::effects::Blur_Mode::Square {..} => "Square", effect::effects::Blur_Mode::Downscale {..} => "Downscale", }),
                     effect::effects::EffectsEnum::ColorKey(_) => format!("ColorKey"),
                 }),
+                crate::video::VideoTypeEnum::Text(t) => match t.text() {
+                    crate::content::text::TextType::Static(txt) => format!("Text: \"{}\"", txt),
+                },
                 crate::video::VideoTypeEnum::Image(i) => format!("Image: {}", match i.path().file_name() { Some(n) => n.to_string_lossy().to_string(), None => i.path().to_string_lossy().to_string(), }),
                 crate::video::VideoTypeEnum::Raw(i) => format!("Video: {}", i.get_dir().to_string_lossy().to_string()),
+                crate::video::VideoTypeEnum::Ffmpeg(i) => format!("ffmpeg: {}", i.path().to_string_lossy().to_string()),
             }
         }
 

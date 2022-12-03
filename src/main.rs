@@ -13,6 +13,7 @@ mod gui;
 mod multithreading;
 mod files;
 mod assets;
+mod types;
 
 // ffmpeg -i vids/video.mp4 path/%09d.png
 
@@ -20,6 +21,9 @@ mod assets;
 
 fn main() {
     let mut args = cli::CustomArgs::read_from_env();
+    if let Err(e) = std::fs::create_dir_all("/tmp/dummi26/rusty_editor_for_da_moving_pictures/") {
+        println!("Failed to setup /tmp/... dir. This might cause some functionality that relies on /tmp/... to break, but is not necessarily fatal.");
+    }
     //
     loop {
         args = match args.action {

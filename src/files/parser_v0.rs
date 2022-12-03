@@ -32,7 +32,7 @@ pub fn parse(str: &str, path: &PathBuf) -> Result<Project, ParserError> {
     }
 }
 
-fn parse_proj(chars: &mut Chars, path: PathBuf) -> Result<ProjectData, ParserError> {
+pub fn parse_proj(chars: &mut Chars, path: PathBuf) -> Result<ProjectData, ParserError> {
     Ok(ProjectData {
         name: format!("doesn't_matter"),
         path: Some(path),
@@ -40,7 +40,7 @@ fn parse_proj(chars: &mut Chars, path: PathBuf) -> Result<ProjectData, ParserErr
     })
 }
 
-fn parse_vid(chars: &mut Chars) -> Result<Video, ParserError> {
+pub fn parse_vid(chars: &mut Chars) -> Result<Video, ParserError> {
     let mut pos = None;
     let mut start = None;
     let mut length = None;
@@ -96,7 +96,7 @@ fn parse_vid(chars: &mut Chars) -> Result<Video, ParserError> {
     }
 }
 
-fn parse_vid_vids(chars: &mut Chars) -> Result<Vec<Video>, ParserError> {
+pub fn parse_vid_vids(chars: &mut Chars) -> Result<Vec<Video>, ParserError> {
     let mut vec = Vec::new();
     loop {
         match chars.next() {
@@ -108,7 +108,7 @@ fn parse_vid_vids(chars: &mut Chars) -> Result<Vec<Video>, ParserError> {
     Ok(vec)
 }
 
-fn parse_vid_video(chars: &mut Chars) -> Result<VideoType, ParserError> {
+pub fn parse_vid_video(chars: &mut Chars) -> Result<VideoType, ParserError> {
     let mut identifier = String::new();
     loop {
         match chars.next() {
@@ -190,42 +190,30 @@ fn parse_vid_video(chars: &mut Chars) -> Result<VideoType, ParserError> {
                 _ => return Err(ParserError::UnknownEffect(effect_name)),
             })
         },
-        "Image" => {
-            let mut path = std::path::PathBuf::from("/");
-            let mut path_current = String::new();
-            loop {
+        "Text" => {
+            let font_path = parse_path(chars)?;
+            let font_index = parse_vid_int(chars)?;
+            let color = crate::types::Color::parse(chars)?;
+            let mut text = crate::content::text::Text::new(
                 match chars.next() {
-                    Some('/') => {
-                        path.push(path_current);
-                        path_current = String::new();
-                    },
-                    Some('\\') => {
-                        if path_current.len() != 0 { path.push(path_current); };
-                        break;
-                    },
-                    Some(ch) => path_current.push(ch),
+                    Some('s') => crate::content::text::TextType::Static(parse_string(chars)?),
+                    Some(c) => return Err(ParserError::InvalidTextType(c)),
                     None => return Err(ParserError::UnexpectedEOF),
-                };
-            };
-            VideoTypeEnum::Image(crate::content::image::Image::new(path))
+                }
+            );
+            text.set_color(color);
+            if let Ok(file) = std::fs::read(&font_path) {
+                if let Some(font) = rusttype::Font::try_from_vec_and_index(file, font_index) {
+                    text.set_font(font.into());
+                } else { println!("Font '{}' could not be parsed (using the ttf_parser crate)", font_path.to_string_lossy().as_ref()); }
+            } else { println!("Font file '{}' does not exist!", font_path.to_string_lossy().as_ref()); };
+            VideoTypeEnum::Text(text)
+        },
+        "Image" => {
+            VideoTypeEnum::Image(crate::content::image::Image::new(parse_path(chars)?))
         }
         "VidFromImagesInDirectory" => {
-            let mut directory = std::path::PathBuf::from("/");
-            let mut directory_current = String::new();
-            loop {
-                match chars.next() {
-                    Some('/') => {
-                        directory.push(directory_current);
-                        directory_current = String::new();
-                    },
-                    Some('\\') => {
-                        if directory_current.len() != 0 { directory.push(directory_current); };
-                        break;
-                    },
-                    Some(ch) => directory_current.push(ch),
-                    None => return Err(ParserError::UnexpectedEOF),
-                };
-            };
+            let directory = parse_path(chars)?;
             let crop = {
                 let mut first = String::new();
                 let mut second = String::new();
@@ -258,11 +246,16 @@ fn parse_vid_video(chars: &mut Chars) -> Result<VideoType, ParserError> {
                 }
             )
         },
+        "VidUsingFfmpeg" => {
+            VideoTypeEnum::Ffmpeg(
+                crate::content::ffmpeg_vid::FfmpegVid::new(parse_path(chars)?)
+            )
+        },
         _ => return Err(ParserError::InvalidVideoType(identifier)),
     }))
 }
 
-fn parse_vid_curve(chars: &mut Chars) -> Result<Curve, ParserError> {
+pub fn parse_vid_curve(chars: &mut Chars) -> Result<Curve, ParserError> {
     Ok(loop { break match chars.next() {
         Some(char) => match char {
             ' ' | '\t' => continue,
@@ -302,7 +295,8 @@ fn parse_vid_curve(chars: &mut Chars) -> Result<Curve, ParserError> {
     }; })
 }
 
-fn parse_vid_int<T>(chars: &mut Chars) -> Result<T, ParserError> where T: FromStr<Err = std::num::ParseIntError> {
+/// Parses an integer in the form "(int);"
+pub fn parse_vid_int<T>(chars: &mut Chars) -> Result<T, ParserError> where T: FromStr<Err = std::num::ParseIntError> {
     let str = parse_vid_to_next_semicolon_errors(String::new(), chars)?;
     match str.parse() {
         Ok(v) => Ok(v),
@@ -310,19 +304,19 @@ fn parse_vid_int<T>(chars: &mut Chars) -> Result<T, ParserError> where T: FromSt
     }
 }
 
-fn parse_vid_f64_prepend(prepend: String, chars: &mut Chars) -> Result<f64, ParserError> {
+pub fn parse_vid_f64_prepend(prepend: String, chars: &mut Chars) -> Result<f64, ParserError> {
     let str = parse_vid_to_next_semicolon_errors(prepend, chars)?;
     match str.parse() {
         Ok(v) => Ok(v),
         Err(err) => Err(ParserError::ParseFloatError(str, err)),
     }
 }
-fn parse_vid_f64(chars: &mut Chars) -> Result<f64, ParserError> {
+pub fn parse_vid_f64(chars: &mut Chars) -> Result<f64, ParserError> {
     parse_vid_f64_prepend(String::new(), chars)
 }
 
 /// Same as the one without _errors, but (Ok(s), _) becomes Ok(s) while (Err(s), _) becomes Err(ParserError::UnexpectedEOF)
-fn parse_vid_to_next_semicolon_errors(prepend: String, chars: &mut Chars) -> Result<String, ParserError> {
+pub fn parse_vid_to_next_semicolon_errors(prepend: String, chars: &mut Chars) -> Result<String, ParserError> {
     if let Ok(text) = parse_vid_to_next_semicolon(prepend, chars).0 {
         Ok(text)
     } else {
@@ -333,7 +327,7 @@ fn parse_vid_to_next_semicolon_errors(prepend: String, chars: &mut Chars) -> Res
 /// The first tuple member can be Ok(prepend+chars) where chars are all chars until the first semicolon
 ///                           or Err(prepend+chars) where chars are all chars until the iterator returned None.
 /// The second tuple member can be discarded, it contains mostly debugging information. See the fn definition for more info.
-fn parse_vid_to_next_semicolon(mut prepend: String, chars: &mut Chars) -> (Result<String, String>, (u32, u32)) {
+pub fn parse_vid_to_next_semicolon(mut prepend: String, chars: &mut Chars) -> (Result<String, String>, (u32, u32)) {
     let mut chars_added = 0;
     let mut chars_discarded = 0;
     loop {
@@ -348,4 +342,48 @@ fn parse_vid_to_next_semicolon(mut prepend: String, chars: &mut Chars) -> (Resul
         };
     };
     return (Ok(prepend), (chars_added, chars_discarded))
+}
+
+/// Reads all chars into a buffer, stopping at '\!', and interpreting '\\' as '\', '\n' as newline, etc. \x with an unknown x will be interpreted litterally, but this is unreliable, so please remember to replace all '\'s with '\\' when saving!
+pub fn parse_string(chars: &mut Chars) -> Result<String, ParserError> {
+    let mut buf = String::new();
+    let mut backslash = false;
+    loop {
+        if let Some(ch) = chars.next() {
+            if ! backslash {
+                match ch {
+                    '\\' => backslash = true,
+                    c => buf.push(c),
+                }
+            } else {
+                match ch {
+                    'n' => buf.push('\n'),
+                    '\\' => buf.push('\\'),
+                    't' => buf.push('\t'),
+                    '!' => break Ok(buf), // the sequence \! terminates the string
+                    c => { buf.push('\\'); buf.push(c); },
+                }
+            }
+        } else { return Err(ParserError::UnexpectedEOF); }
+    }
+}
+
+pub fn parse_path(chars: &mut Chars) -> Result<std::path::PathBuf, ParserError> {
+    let mut path = std::path::PathBuf::from("/");
+    let mut path_current = String::new();
+    loop {
+        match chars.next() {
+            Some('/') => {
+                path.push(path_current);
+                path_current = String::new();
+            },
+            Some('\\') => {
+                if path_current.len() != 0 { path.push(path_current); };
+                break;
+            },
+            Some(ch) => path_current.push(ch),
+            None => return Err(ParserError::UnexpectedEOF),
+        };
+    };
+    Ok(path)
 }

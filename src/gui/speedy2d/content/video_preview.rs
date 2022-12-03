@@ -6,6 +6,9 @@ use super::super::layout::{EditorWindowLayoutContentTrait, EditorWindowLayoutCon
 
 use speedy2d::font::TextLayout;
 
+use clipboard::ClipboardProvider;
+use clipboard::ClipboardContext;
+
 pub struct VideoPreview {
     time_created: std::time::Instant,
     video: VideoWithAutoCache,
@@ -14,7 +17,7 @@ pub struct VideoPreview {
     mouse_pos: Option<(f32, f32)>,
     mouse_on_progress_bar: Option<f64>,
     mouse_left_button_down_started_on_progress_bar: bool,
-    draw_extra_info: bool,
+    draw_extra_info: Option<Option<(f32, f32, f32, f32, Vec<std::rc::Rc<speedy2d::font::FormattedTextBlock>>)>>,
     layout_content_data: EditorWindowLayoutContentData,
     size: (u32, u32, Option<(f32, f32, std::time::Instant)>),
 }
@@ -25,7 +28,7 @@ impl VideoPreview {
             video: VideoWithAutoCache::start(vid),
             video_position: (0.0, 0.0, 1.0, 0.95),
             progress: 0.0, mouse_pos: None, mouse_on_progress_bar: None, mouse_left_button_down_started_on_progress_bar: false,
-            draw_extra_info: false,
+            draw_extra_info: None,
             layout_content_data: EditorWindowLayoutContentData::default(),
             size: (0, 0, None),
         }
@@ -148,26 +151,34 @@ impl VideoPreview {
         graphics.draw_line(Vector2::new(progress_bar_pos_x, progress_bar_line_y), Vector2::new(position.0 + progress_bar_space_on_side + progress_bar_width, progress_bar_line_y), visibility, Color::BLUE);
         // extra info
         'draw_extra_info: {
-            if self.draw_extra_info {
-                let pos = match self.mouse_pos {
-                    Some((x, y)) => (x, y),
-                    None => (0.5, 0.5),
+            if let Some(mut pot_pos) = std::mem::replace(&mut self.draw_extra_info, None) {
+                let pos = match (&pot_pos, &self.mouse_pos) {
+                    (Some(pos), _) => (pos.0, pos.1),
+                    (None, Some(pos)) => (pos.0 * position.2, pos.1 * position.3),
+                    (None, None) => (0.0, 0.0),
                 };
-                let mouse = Vector2 { x: position.0 + pos.0 * position.2, y: position.1 + pos.1 * position.3 };
+                let mouse = Vector2 { x: position.0 + pos.0, y: position.1 + pos.1 };
                 let margins = 5.0;
-                let pos_in_video = self.get_pos_in_video(pos);
-                let txt = draw_opts.assets_manager.get_default_font().layout_text(
+                let pos_in_video = self.get_pos_in_video((pos.0 / position.2, pos.1 / position.3));
+                let font = draw_opts.assets_manager.get_default_font();
+                let txt = font.layout_text(
                     format!(
-                        "Time: {}\nPos: {} | {}",
+                        "Time: {}\nPos: {:.3} | {:.3}",
                         self.progress,
                         pos_in_video.0, pos_in_video.1
                     ).as_str(),
                     15.0, speedy2d::font::TextOptions::new());
-                let (w, h) = (txt.width(), txt.height());
+                let (mut w, h) = (txt.width(), txt.height());
                 let mut x1 = mouse.x.max(position.0);
                 let mut y1 = (mouse.y - margins - h - margins).max(position.1);
-                let mut x2 = x1 + margins + w + margins;
                 let mut y2 = y1 + margins + h + margins;
+                // extra buttons and stuff
+                if let Some(pot_pos) = &mut pot_pos {
+                    if pot_pos.2 > w { w = pot_pos.2; };
+                    y2 += pot_pos.3;
+                };
+                // ensure the info box doesn't leave my area
+                let mut x2 = x1 + margins + w + margins;
                 if x2 > position.0 + position.2 {
                     let diff = x2 - position.0 - position.2;
                     x2 -= diff;
@@ -182,6 +193,15 @@ impl VideoPreview {
                 }
                 graphics.draw_rectangle(Rectangle::new(Vector2 { x: x1, y: y1 }, Vector2 { x: x2, y: y2 }), Color::from_rgba(0.2, 0.2, 0.3, 0.75));
                 graphics.draw_text(Vector2 { x: x1 + margins, y: y1 + margins }, Color::from_rgb(1.0, 1.0, 1.0), &txt);
+                if let Some((_x, y, _w, h, buttons)) = &pot_pos {
+                    let mut y = *y;
+                    let item_height = h / buttons.len().max(1) as f32;
+                    for button in buttons.iter() {
+                        graphics.draw_text(Vector2 { x: x1 + margins, y }, Color::from_rgb(1.0, 1.0, 1.0), button);
+                        y += item_height;
+                    }
+                }
+                self.draw_extra_info = Some(pot_pos);
             }
         }
     }
@@ -246,8 +266,7 @@ impl EditorWindowLayoutContentTrait for VideoPreview {
         }
     }
 
-    fn handle_input_custom(&mut self, _draw_opts: &mut crate::gui::speedy2d::layout::EditorWindowLayoutContentDrawOptions, input: &mut crate::gui::speedy2d::layout::UserInput) {
-        self.draw_extra_info = input.owned.keyboard_modifiers_state.shift();
+    fn handle_input_custom(&mut self, draw_opts: &mut crate::gui::speedy2d::layout::EditorWindowLayoutContentDrawOptions, input: &mut crate::gui::speedy2d::layout::UserInput) {
         match &input.owned.action {
             InputAction::None => (),
             InputAction::Mouse(action) => match action {
@@ -266,6 +285,53 @@ impl EditorWindowLayoutContentTrait for VideoPreview {
                 },
                 crate::gui::speedy2d::layout::MouseAction::ButtonDown(btn) => {
                     self.mouse_left_button_down_started_on_progress_bar = false;
+                    if let Some(Some((popup_x, popup_y, popup_w, popup_h, actions))) = &self.draw_extra_info {
+                        let (mouse_x, mouse_y) = (input.clonable.mouse_pos.0 * draw_opts.my_size_in_pixels.0, input.clonable.mouse_pos.1 * draw_opts.my_size_in_pixels.1);
+                        if mouse_x >= *popup_x && mouse_x <= *popup_x + *popup_w {
+                            let which = (mouse_y - popup_y) / popup_h;
+                            if which >= 0.0 && which <= 1.0 {
+                                let which = (which * actions.len() as f32) as usize;
+                                match which {
+                                    0 => {
+                                        let cb: Result<clipboard::ClipboardContext, _> = clipboard::ClipboardProvider::new();
+                                        match cb {
+                                            Ok(mut cb) => if let Err(e) = cb.set_contents(format!("{}", self.progress)) { println!("Cannot set clipboard contents: {e}"); },
+                                            Err(e) => println!("Cannot access clipboard: {e}"),
+                                        }
+                                    },
+                                    1 => {
+                                        let cb: Result<clipboard::ClipboardContext, _> = clipboard::ClipboardProvider::new();
+                                        match cb {
+                                            Ok(mut cb) => {
+                                                let pos = self.get_pos_in_video((popup_x / draw_opts.my_size_in_pixels.0, popup_y / draw_opts.my_size_in_pixels.1));
+                                                if let Err(e) = cb.set_contents(format!("{}/{}", pos.0, pos.1)) { println!("Cannot set clipboard contents: {e}"); };
+                                            },
+                                            Err(e) => println!("Cannot access clipboard: {e}"),
+                                        }
+                                    },
+                                    _ => {},
+                                }
+                            }
+                        }
+                        self.draw_extra_info = None;
+                    } else {
+                        let pos = self.get_pos_in_video(self.mouse_pos.unwrap_or((-1.0, -1.0)));
+                        if pos.0 >= 0.0 && pos.0 <= 1.0 && pos.1 >= 0.0 && pos.1 < 1.0 {
+                            if match btn { speedy2d::window::MouseButton::Right => true, _ => false } {
+                                let font = draw_opts.assets_manager.get_default_font();
+                                let item_height = font.layout_text("|", 15.0, speedy2d::font::TextOptions::new()).height();
+                                let buttons: Vec<_> = ["copy time", "copy position"].into_iter().map(|i| font.layout_text(i, 15.0, speedy2d::font::TextOptions::new())).collect();
+                                let mut width = 0.0;
+                                for btn in buttons.iter() {
+                                    let btnw = btn.width();
+                                    if btnw > width { width = btnw; }
+                                }
+                                let height = item_height * buttons.len() as f32;
+                                let mp = if let Some(mp) = &self.mouse_pos { (mp.0 * draw_opts.my_size_in_pixels.0, mp.1 * draw_opts.my_size_in_pixels.1) } else { (0.0, 0.0) };
+                                self.draw_extra_info = Some(Some((mp.0, mp.1, width, height, buttons)));
+                            }
+                        }
+                    }
                     match self.mouse_on_progress_bar {
                         Some(prog) => match btn {
                             speedy2d::window::MouseButton::Left => {self.progress = prog; self.video.set_desired_progress(prog); self.mouse_left_button_down_started_on_progress_bar = true; }
@@ -281,7 +347,27 @@ impl EditorWindowLayoutContentTrait for VideoPreview {
                 crate::gui::speedy2d::layout::MouseAction::ButtonUp(_) => (),
                 crate::gui::speedy2d::layout::MouseAction::Scroll(_) => (),
             },
-            InputAction::Keyboard(action) => {},
+            InputAction::Keyboard(action) => match action {
+                crate::gui::speedy2d::layout::KeyboardAction::Pressed(kc, _) => {
+                    // println!("Pressed {kc}");
+                    // draw extra info
+                    if input.owned.keyboard_modifiers_state.shift() && self.draw_extra_info.is_none() {
+                        self.draw_extra_info = Some(None);
+                    }
+                    match (input.owned.keyboard_modifiers_state.logo(), input.owned.keyboard_modifiers_state.ctrl(), input.owned.keyboard_modifiers_state.alt(), input.owned.keyboard_modifiers_state.shift(), kc) {
+                        _ => (),
+                    }
+                },
+                crate::gui::speedy2d::layout::KeyboardAction::Released(_, _) => {
+                    // draw extra info
+                    if let Some(s) = &self.draw_extra_info {
+                        if s.is_none() && ! input.owned.keyboard_modifiers_state.shift() {
+                            self.draw_extra_info = None;
+                        }
+                    }
+                },
+                crate::gui::speedy2d::layout::KeyboardAction::Typed(_ch) => {},
+            },
         }
     }
     

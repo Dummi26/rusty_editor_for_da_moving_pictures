@@ -13,8 +13,14 @@ pos:012345
 
 1, 2, 3, 4: x, y, width, height (curves)
 
-## Vid from frames
+## Vid from frames (VidFromImagesInDirectory)
 
 \[path]\\\[first frame]\[- or +]\[-: last frame (exclusive) | +: how many frames to cut off from the end]
 
 default: \[path]\\0+0; (don't cut off any frames on either side)
+
+## Vid from file using ffmpeg (VidUsingFfmpeg)
+
+\[path]\\
+
+This is very slow and does not cache the video. It uses ffprobe to get the video's length, then ffmpeg to get a frame from the video, write that to /tmp/..., read that and then display the frame.

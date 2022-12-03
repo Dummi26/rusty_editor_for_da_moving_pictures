@@ -58,7 +58,14 @@ impl QuickCommandsHandler {
                         crate::content::input_video::InputVideo::new()
                     }
                 ),
-                _ => return Err(format!("{} <- expected list/effect/img/vid", command)),
+                "ffmpeg" => crate::video::VideoTypeEnum::Ffmpeg(
+                    if let Some(rest) = command_rest {
+                        crate::content::ffmpeg_vid::FfmpegVid::new(rest.into())
+                    } else {
+                        crate::content::ffmpeg_vid::FfmpegVid::new(std::path::PathBuf::new())
+                    }
+                ),
+                _ => return Err(format!("{} <- expected list/effect/img/vid/ffmpeg", command)),
             };
             return Ok(
                 vec![
@@ -83,6 +90,30 @@ impl QuickCommandsHandler {
                     )
                 ]
             );
+        }
+        if command.starts_with("wrap") {
+            let command_next = &command[5..];
+            let wrap_type = command_next.split_whitespace().next().unwrap().to_lowercase();
+            let command_rest = if command_next.len() > wrap_type.len() + 1 { Some(&command_next[wrap_type.len()+1..]) } else { None };
+            match wrap_type.as_str() {
+                "aspect_ratio" => {
+                    if let Some(rest) = command_rest {
+                        let mut nums = rest.split(':');
+                        if let (Some(n1), Some(n2)) = (nums.next(), nums.next()) {
+                            match (n1.parse::<f64>(), n2.parse::<f64>()) {
+                                (Ok(n1), Ok(n2)) => return Ok(vec![QctCommand::ApplyChanges(crate::video::VideoChanges { wrap: Some(crate::video::VideoChangesWrapWith::AspectRatio(crate::curve::Curve::Constant(n1), crate::curve::Curve::Constant(n2))), ..Default::default() })]),
+                                (Ok(_), Err(e2)) => return Err(format!("width '{}' could not be parsed: {}", n2, e2)),
+                                (Err(e1), Ok(_)) => return Err(format!("height '{}' could not be parsed: {}", n1, e1)),
+                                (Err(e1), Err(e2)) => return Err(format!("width '{}' and height '{}' could not be parsed: {} | {}", n1, n2, e1, e2)),
+                            }
+                        } else {
+                            return Err(format!("wrap type 'aspect_ratio' requires an aspect ratio specified as [width]:[height]."));
+                        }
+                    }
+                },
+                "list" => return Ok(vec![QctCommand::ApplyChanges(crate::video::VideoChanges { wrap: Some(crate::video::VideoChangesWrapWith::List), ..Default::default() })]),
+                invalid_wrap_type => return Err(format!("Invalid wrap type: '{}'", invalid_wrap_type)),
+            }
         }
 
         Err(format!("{} (?)", command))
@@ -219,7 +250,33 @@ impl QuickCommandsHandler {
                                     possible_commands.push(s);
                                 }
                             },
-                            3 => if match editing_part_abstract { EditingPartAbstract::List {..} => true, _ => false } {
+                            3 => if editing_part_abstract.is_some() {
+                                if "wrap ".starts_with(&query) {
+                                    let s = "wrap [mode]".to_string();
+                                    gen.send(QctCompletions::Set(possible_commands.len(), s.clone())).unwrap();
+                                    possible_commands.push(s);
+                                }
+                                if query.starts_with("wrap ") {
+                                    let mode = &query[5..];
+                                    let mut comps = Vec::new();
+                                    if "list".starts_with(mode) && mode.len() <= 4 {
+                                        comps.push("list");
+                                    }
+                                    if "aspect_ratio " == mode {
+                                        comps.push("aspect_ratio [w]:[h]");
+                                    } else if "aspect_ratio".starts_with(mode) {
+                                        comps.push("aspect_ratio");
+                                    } else if mode.starts_with("aspect_ratio ") {
+                                        comps.push(mode);
+                                    }
+                                    for comp in comps {
+                                        let s = format!("wrap {}", comp);
+                                        gen.send(QctCompletions::Set(possible_commands.len(), s.clone())).unwrap();
+                                        possible_commands.push(s);
+                                    }
+                                }
+                            },
+                            4 => if match editing_part_abstract { EditingPartAbstract::List {..} => true, _ => false } {
                                 if "add ".starts_with(&query) {
                                     let s = "add [what]".to_string();
                                     gen.send(QctCompletions::Set(possible_commands.len(), s.clone())).unwrap();
@@ -267,8 +324,58 @@ impl QuickCommandsHandler {
                                     if "vid".starts_with(whatl) {
                                         suggestions.push("vid".to_string());
                                     } // no else!
-                                    if whatl.starts_with("vid") {
+                                    if whatl == "vid" {
                                         suggestions.push("vid [path]".to_string());
+                                    }
+                                    if whatl.starts_with("vid ") {
+                                        // suggestions.push(what.to_string());
+                                        let path = &what[4..];
+                                        let last_slash = path.rfind("/").unwrap_or(0);
+                                        let dir = &path[..last_slash];
+                                        let file = if path.len() > last_slash+1 { Some(&path[last_slash+1..]) } else { None };
+                                        // let mut valid_entries = Vec::new();
+                                        if let Ok(dir_entries) = std::fs::read_dir(std::path::PathBuf::from(dir)) {
+                                            for dir_entry in dir_entries {
+                                                if let Ok(entry) = dir_entry {
+                                                    let file_name_ok = if let Some(file) = file {
+                                                        if let Some(file_name) = entry.path().file_name() {
+                                                            file_name.to_string_lossy().to_string().starts_with(file)
+                                                        } else { false }
+                                                    } else { true };
+                                                    if file_name_ok {
+                                                        suggestions.push(format!("vid {}", entry.path().to_string_lossy()));
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                    if "ffmpeg".starts_with(whatl) {
+                                        suggestions.push("ffmpeg".to_string());
+                                    }
+                                    if whatl == "ffmpeg" {
+                                        suggestions.push("ffmpeg [path]".to_string());
+                                    }
+                                    if whatl.starts_with("ffmpeg ") {
+                                        // suggestions.push(what.to_string());
+                                        let path = &what[7..];
+                                        let last_slash = path.rfind("/").unwrap_or(0);
+                                        let dir = &path[..last_slash];
+                                        let file = if path.len() > last_slash+1 { Some(&path[last_slash+1..]) } else { None };
+                                        // let mut valid_entries = Vec::new();
+                                        if let Ok(dir_entries) = std::fs::read_dir(std::path::PathBuf::from(dir)) {
+                                            for dir_entry in dir_entries {
+                                                if let Ok(entry) = dir_entry {
+                                                    let file_name_ok = if let Some(file) = file {
+                                                        if let Some(file_name) = entry.path().file_name() {
+                                                            file_name.to_string_lossy().to_string().starts_with(file)
+                                                        } else { false }
+                                                    } else { true };
+                                                    if file_name_ok {
+                                                        suggestions.push(format!("ffmpeg {}", entry.path().to_string_lossy()));
+                                                    }
+                                                }
+                                            }
+                                        }
                                     }
                                     for suggestion in suggestions {
                                         let s = format!("add {}", suggestion);
@@ -300,16 +407,20 @@ enum EditingPartAbstract {
     List { length: usize, },
     AspectRatio { vid: Box<Self>, width: crate::curve::Curve, height: crate::curve::Curve, },
     WithEffect { effect: (), contained: Box<Self>, },
+    Text(crate::content::text::TextType),
     Image { path: std::path::PathBuf, },
     Video { path: std::path::PathBuf, },
+    Ffmpeg { path: std::path::PathBuf, },
 }
 impl From<&crate::video::Video> for EditingPartAbstract { fn from(vid: &crate::video::Video) -> Self {
     match &vid.video.vt {
         crate::video::VideoTypeEnum::List(vec) => Self::List { length: vec.len(), },
         crate::video::VideoTypeEnum::AspectRatio(v, w, h) => Self::AspectRatio { vid: Box::new(v.as_ref().into()), width: w.clone(), height: h.clone() },
         crate::video::VideoTypeEnum::WithEffect(contained, _effect) => Self::WithEffect { effect: () /* TODO */, contained: Box::new(contained.as_ref().into()), },
+        crate::video::VideoTypeEnum::Text(t) => Self::Text(t.text().clone()),
         crate::video::VideoTypeEnum::Image(img) => Self::Image { path: img.path().clone(), },
         crate::video::VideoTypeEnum::Raw(vid) => Self::Video { path: vid.get_dir().clone() },
+        crate::video::VideoTypeEnum::Ffmpeg(vid) => Self::Ffmpeg { path: vid.path().clone() },
     }
 } }
 impl EditingPartAbstract {
