@@ -56,9 +56,13 @@ impl FfmpegVid {
         .stderr(std::process::Stdio::null())
         .output() {
             if let Ok(s) = String::from_utf8(ffprobe_output.stdout) {
-                if let Ok(n) = s[0..s.len()-1].parse() {
-                    n
-                } else { println!("ffprobe's output was not a valid float: '{}'", &s[0..s.len()-1]); 0.0 }
+                if s.len() > 0 {
+                    if let Ok(n) = s[0..s.len()-1].parse() {
+                        n
+                    } else { println!("ffprobe's output was not a valid float: '{}'", &s[0..s.len()-1]); 0.0 }
+                } else {
+                    println!("ffprobe's output was an empty string."); 0.0
+                }
             } else { println!("ffprobe's output was not utf-8."); 0.0 }
         } else { println!("Could not run ffprobe."); 0.0 }
     }
