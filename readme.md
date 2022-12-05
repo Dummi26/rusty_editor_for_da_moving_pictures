@@ -35,6 +35,62 @@ Ctrl+Space: QVidRunner (command bar, also happens to be useful for deleting stuf
 
 Esc: GUI layout editing mode (this is still very buggy - left click and hold to resize splits, right click to change vertical/horizontal)
 
+### How to do pretty much anything
+
+Some values in the editor (currently: all Curves and the Text) can get their value from external executables.
+
+https://user-images.githubusercontent.com/67615357/205752349-d35bdbde-c6ed-4435-93fc-00b0f2075cd9.mp4
+
+Consider this demo project:
+
+```
+0.0
+proj:
+vid:
++
+    pos:1
+        0;
+        !/tmp/height.sh\
+        1;
+        0.1;
+    start:0;length:1;
+    video:Text:
+        /tmp/FiraSans-Regular.ttf\0;
+        r1;1;1;1;
+        !_/tmp/text.sh\
+    :
+;
+```
+
+It shows one line of text using the FiraSans font. The !/tmp/height.sh\ in the position calls the height.sh script, which prints a float to its stdout. This number will be used as the y-position.
+
+The !_/tmp/text.sh\ line represents the text contents. It calls the text.sh script and uses its output as the text to display.
+
+These are the scripts:
+
+heigh.sh (prints sin(x))
+
+```
+#!/bin/sh
+echo $1 | python /tmp/sin.py
+```
+
+text.sh (prints "sin(x) = " followed by sin(x))
+```
+#!/bin/sh
+printf "sin($1) = "
+echo $1 | python /tmp/sin.py"
+```
+
+and sin.py (used by the shell scripts to calculate sin(x))
+
+```
+import math
+print(math.sin(float(input())))
+```
+
+
+
 # Disclaimer
 
 This project is nowhere near finished. Nothing is final, the GUI isn't really usable yet, projects can be loaded from .txt files (src/files/parser_general.rs), but they can't be saved yet, videos can't be loaded (only a directory of image files represening the video's frames) and there are a lot of bugs or just weird/unexpected behavior.
