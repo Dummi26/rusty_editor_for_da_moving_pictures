@@ -199,8 +199,7 @@ pub mod effects {
     } }
     impl EffectT for ChangeSpeed {
         fn process_image(&mut self, progress: f64, vid: &mut crate::video::Video, img: &mut image::DynamicImage, render_settings: &mut VideoRenderSettings) {
-            if let Some(mut prep_data) = vid.prep_draw(progress) {
-                prep_data.progress = self.time.get_value(prep_data.progress);
+            if let Some(prep_data) = vid.prep_draw(self.time.get_value(progress)) {
                 vid.draw(img, prep_data, render_settings);
             };
         }

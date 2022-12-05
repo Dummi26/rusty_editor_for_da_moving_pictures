@@ -197,6 +197,15 @@ pub fn parse_vid_video(chars: &mut Chars) -> Result<VideoType, ParserError> {
             let mut text = crate::content::text::Text::new(
                 match chars.next() {
                     Some('s') => crate::content::text::TextType::Static(parse_string(chars)?),
+                    Some('!') => {
+                        match chars.next() {
+                            Some(_) => { // TODO: add more modes and options for args and stuff, also add an error for wrong char here
+                                let path = parse_path(chars)?;
+                                crate::content::text::TextType::Program(crate::external_program::ExternalProgram::new(path, crate::external_program::ExternalProgramMode::RunOnceArg))
+                            },
+                            None => return Err(ParserError::UnexpectedEOF),
+                        }
+                    },
                     Some(c) => return Err(ParserError::InvalidTextType(c)),
                     None => return Err(ParserError::UnexpectedEOF),
                 }
@@ -278,17 +287,7 @@ pub fn parse_vid_curve(chars: &mut Chars) -> Result<Curve, ParserError> {
                     vec
                 }
             ),
-            '!' => Curve::Program({
-                let mut path = String::new();
-                loop {
-                    match chars.next() {
-                        None => return Err(ParserError::UnexpectedEOF),
-                        Some('\\') => break,
-                        Some(ch) => path.push(ch),
-                    }
-                }
-                std::path::PathBuf::from(path)
-            }),
+            '!' => Curve::Program(crate::external_program::ExternalProgram::new(parse_path(chars)?, crate::external_program::ExternalProgramMode::RunOnceArg), crate::curve::CurveExternalProgramMode::String), // TODO: Make this more flexible
             _ => return Err(ParserError::InvalidCurveIdentifier(char)),
         },
         None => return Err(ParserError::UnexpectedEOF),

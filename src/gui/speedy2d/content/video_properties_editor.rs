@@ -257,6 +257,10 @@ struct EtChangeType {
                             ("image (using this as its path)".to_string(), Some(crate::video::VideoChangesReplaceWith::Image)),
                             ("video (with this as its path)".to_string(), Some(crate::video::VideoChangesReplaceWith::Ffmpeg)),
                         ],
+                        crate::content::text::TextType::Program(_) => vec![
+                            ("image (using the programs path)".to_string(), Some(crate::video::VideoChangesReplaceWith::Image)),
+                            ("video (using the programs path)".to_string(), Some(crate::video::VideoChangesReplaceWith::Ffmpeg)),
+                        ],
                     },
                     VideoTypeEnum::Image(..) => vec![
                         ("text (showing the path)".to_string(), Some(crate::video::VideoChangesReplaceWith::Text)),
@@ -1007,7 +1011,7 @@ impl VideoPropertiesEditor {
                     // graphics.draw_text(Vector2 { x: x + (line_height - text.width()) / 2.0, y: y + 0.125 * line_height, }, tab_color, &text);
                     tab.draw_icon(vis, hovered, selected, graphics, &(x, y, line_height, line_height), &SharedEtData { unified_color: tab_color });
                     x += line_height;
-                    graphics.draw_line(Vector2 { x: x, y: y, }, Vector2 { x: x, y: y + line_height, }, 1.0, Color::from_rgba(0.6, 0.6, 0.6, vis));
+                    graphics.draw_line(Vector2 { x, y, }, Vector2 { x, y: y + line_height, }, 1.0, Color::from_rgba(0.6, 0.6, 0.6, vis));
                     index += 1;
                 };
             };

@@ -189,6 +189,7 @@ impl Content for Video {
                     (VideoTypeEnum::Text(t), into) => {
                         let text = match t.text() {
                             crate::content::text::TextType::Static(t) => t.clone(),
+                            crate::content::text::TextType::Program(p) => p.path.to_string_lossy().to_string(),
                         };
                         match into {
                             VideoChangesReplaceWith::List => VideoTypeEnum::List(vec![]),

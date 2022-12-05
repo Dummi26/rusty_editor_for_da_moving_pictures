@@ -219,6 +219,7 @@ impl VideoTree {
                 }),
                 crate::video::VideoTypeEnum::Text(t) => match t.text() {
                     crate::content::text::TextType::Static(txt) => format!("Text: \"{}\"", txt),
+                    crate::content::text::TextType::Program(p) => format!("Text: from '{}'", p.path.to_string_lossy().as_ref()),
                 },
                 crate::video::VideoTypeEnum::Image(i) => format!("Image: {}", match i.path().file_name() { Some(n) => n.to_string_lossy().to_string(), None => i.path().to_string_lossy().to_string(), }),
                 crate::video::VideoTypeEnum::Raw(i) => format!("Video: {}", i.get_dir().to_string_lossy().to_string()),

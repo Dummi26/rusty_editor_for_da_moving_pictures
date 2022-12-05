@@ -22,6 +22,7 @@ pub struct TextChanges {
 #[derive(Clone)]
 pub enum TextType {
     Static(String),
+    Program(crate::external_program::ExternalProgram),
 }
 
 impl Content for Text {
@@ -76,10 +77,20 @@ impl Text {
         self.color = new;
     }
     pub fn text(&self) -> &TextType { &self.text }
-    pub fn draw(&mut self, image: &mut DynamicImage, prog: f64) {
-        let text = match &self.text {
+    pub fn get_text(&self, prog: f64) -> String {
+        match &self.text {
             TextType::Static(text) => text.to_string(),
-        };
+            TextType::Program(p) => match p.get_next(format!("{}", prog).as_bytes()) {
+                Some(out) => match String::from_utf8(out) {
+                    Ok(v) => v.trim_end().to_string(),
+                    Err(_) => "external program: output wasn't valid UTF-8!".to_string(),
+                },
+                None => "external program: couldn't launch or couldn't get output".to_string(),
+            },
+        }
+    }
+    pub fn draw(&mut self, image: &mut DynamicImage, prog: f64) {
+        let text = self.get_text(prog);
         if let Some(font) = &self.font {
             let c = self.color.get_rgba(prog);
             let dimensions = imageproc::drawing::text_size(rusttype::Scale::uniform(image.height() as f32), font, &text);

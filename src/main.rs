@@ -14,6 +14,7 @@ mod multithreading;
 mod files;
 mod assets;
 mod types;
+mod external_program;
 
 // ffmpeg -i vids/video.mp4 path/%09d.png
 
