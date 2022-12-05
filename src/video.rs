@@ -26,10 +26,23 @@ pub struct VideoChanges {
     pub length: Option<f64>,
     pub video: Option<VideoTypeChanges>,
     pub wrap: Option<VideoChangesWrapWith>,
+    pub replace: Option<VideoChangesReplaceWith>,
 }
+#[derive(Clone)]
 pub enum VideoChangesWrapWith {
     List,
     AspectRatio(Curve, Curve),
+    WithEffect,
+}
+#[derive(Clone)]
+pub enum VideoChangesReplaceWith {
+    List,
+    AspectRatio,
+    WithEffect,
+    Text,
+    Image,
+    Raw,
+    Ffmpeg,
 }
 impl Content for Video {
     fn clone_no_caching(&self) -> Self {
@@ -61,7 +74,12 @@ impl Content for Video {
     }
     
     fn has_changes(&self) -> bool {
-        self.as_content_changes.pos.is_some() | self.as_content_changes.start.is_some() | self.as_content_changes.length.is_some() | self.as_content_changes.video.is_some() | self.as_content_changes.wrap.is_some()
+        self.as_content_changes.pos.is_some()
+        | self.as_content_changes.start.is_some()
+        | self.as_content_changes.length.is_some()
+        | self.as_content_changes.video.is_some()
+        | self.as_content_changes.wrap.is_some()
+        | self.as_content_changes.replace.is_some()
     }
     fn apply_changes(&mut self) -> bool {
         let mut out = false;
@@ -105,6 +123,93 @@ impl Content for Video {
                     let me = std::mem::replace(&mut self.video, VideoType::new(VideoTypeEnum::List(vec![])));
                     self.video = VideoType::new(VideoTypeEnum::AspectRatio(Box::new(Video::new_full(me)), w, h));
                 },
+                VideoChangesWrapWith::WithEffect => {
+                    let me = std::mem::replace(&mut self.video, VideoType::new(VideoTypeEnum::List(vec![])));
+                    self.video = VideoType::new(VideoTypeEnum::WithEffect(
+                        Box::new(Video::new_full(me)),
+                        crate::effect::Effect::new_from_enum(crate::effect::effects::EffectsEnum::Nothing(crate::effect::effects::Nothing::new()))
+                    ));
+                },
+            }
+        }
+        if let Some(replace_with) = self.as_content_changes.replace.take() {
+            'replace_with: {
+                match (&self.video.vt, &replace_with) {
+                    // no change
+                    (VideoTypeEnum::List(..), VideoChangesReplaceWith::List)
+                    | (VideoTypeEnum::AspectRatio(..), VideoChangesReplaceWith::AspectRatio)
+                    | (VideoTypeEnum::WithEffect(..), VideoChangesReplaceWith::WithEffect)
+                    | (VideoTypeEnum::Text(..), VideoChangesReplaceWith::Text)
+                    | (VideoTypeEnum::Image(..), VideoChangesReplaceWith::Image)
+                    | (VideoTypeEnum::Raw(..), VideoChangesReplaceWith::Raw)
+                    | (VideoTypeEnum::Ffmpeg(..), VideoChangesReplaceWith::Ffmpeg)
+                    => break 'replace_with,
+                    _ => (),
+                }
+                let me = std::mem::replace(&mut self.video.vt, VideoTypeEnum::List(vec![]));
+                let new = match (me, replace_with) {
+                    // no change
+                    (VideoTypeEnum::List(..), VideoChangesReplaceWith::List)
+                    | (VideoTypeEnum::AspectRatio(..), VideoChangesReplaceWith::AspectRatio)
+                    | (VideoTypeEnum::WithEffect(..), VideoChangesReplaceWith::WithEffect)
+                    | (VideoTypeEnum::Text(..), VideoChangesReplaceWith::Text)
+                    | (VideoTypeEnum::Image(..), VideoChangesReplaceWith::Image)
+                    | (VideoTypeEnum::Raw(..), VideoChangesReplaceWith::Raw)
+                    | (VideoTypeEnum::Ffmpeg(..), VideoChangesReplaceWith::Ffmpeg)
+                    => unreachable!(), // because of the break 'replace_with above
+                    // raw (no change because things will probably break/crash if we try to do pretty much anyting)
+                    (me, VideoChangesReplaceWith::Raw) => { println!("video from directory full of frames is implemented quite badly and might cause issues here. sorry."); me }, // TODO!
+                    // from/to list
+                    (VideoTypeEnum::List(mut v), VideoChangesReplaceWith::AspectRatio) => {
+                        if v.is_empty() {
+                            VideoTypeEnum::AspectRatio(Box::new(Video::new_full(VideoType::new(VideoTypeEnum::List(vec![])))), Curve::Constant(1.0), Curve::Constant(1.0))
+                        } else { // put the first element of the list into the aspect ratio (use WRAP instead to preserve all elements)
+                            VideoTypeEnum::AspectRatio(Box::new(v.swap_remove(0)), Curve::Constant(1.0), Curve::Constant(1.0))
+                        }
+                    },
+                    (VideoTypeEnum::List(mut v), VideoChangesReplaceWith::WithEffect) => {
+                        VideoTypeEnum::WithEffect(Box::new(if v.is_empty() {
+                            Video::new_full(VideoType::new(VideoTypeEnum::List(vec![])))
+                        } else { v.swap_remove(0) // put the first element of the list into the aspect ratio (use WRAP instead to preserve all elements)
+                        }), crate::effect::Effect::new_from_enum(crate::effect::effects::EffectsEnum::Nothing(crate::effect::effects::Nothing::new())))
+                    },
+                    (VideoTypeEnum::AspectRatio(v, _, _) | VideoTypeEnum::WithEffect(v, _), VideoChangesReplaceWith::List) => VideoTypeEnum::List(vec![*v]),
+                    // both things have one child
+                    (VideoTypeEnum::AspectRatio(v, _, _), VideoChangesReplaceWith::WithEffect) => VideoTypeEnum::WithEffect(v, crate::effect::Effect::new_from_enum(crate::effect::effects::EffectsEnum::Nothing(crate::effect::effects::Nothing::new()))),
+                    (VideoTypeEnum::WithEffect(v, _), VideoChangesReplaceWith::AspectRatio) => VideoTypeEnum::AspectRatio(v, Curve::Constant(1.0), Curve::Constant(1.0)),
+                    // all the things with a path
+                    (VideoTypeEnum::Image(v), VideoChangesReplaceWith::Ffmpeg) => VideoTypeEnum::Ffmpeg(crate::content::ffmpeg_vid::FfmpegVid::new(v.path().clone())),
+                    (VideoTypeEnum::Raw(v), VideoChangesReplaceWith::Image) => VideoTypeEnum::Image(crate::content::image::Image::new(v.get_dir().clone())),
+                    (VideoTypeEnum::Raw(v), VideoChangesReplaceWith::Ffmpeg) => VideoTypeEnum::Ffmpeg(crate::content::ffmpeg_vid::FfmpegVid::new(v.get_dir().clone())),
+                    (VideoTypeEnum::Ffmpeg(v), VideoChangesReplaceWith::Image) => VideoTypeEnum::Image(crate::content::image::Image::new(v.path().clone())),
+                    // to text (where a string representation makes sense) and back
+                    (VideoTypeEnum::Image(v), VideoChangesReplaceWith::Text) => VideoTypeEnum::Text(crate::content::text::Text::new(crate::content::text::TextType::Static(v.path().to_string_lossy().to_string()))),
+                    (VideoTypeEnum::Raw(v), VideoChangesReplaceWith::Text) => VideoTypeEnum::Text(crate::content::text::Text::new(crate::content::text::TextType::Static(v.get_dir().to_string_lossy().to_string()))),
+                    (VideoTypeEnum::Ffmpeg(v), VideoChangesReplaceWith::Text) => VideoTypeEnum::Text(crate::content::text::Text::new(crate::content::text::TextType::Static(v.path().to_string_lossy().to_string()))),
+                    (VideoTypeEnum::Text(t), into) => {
+                        let text = match t.text() {
+                            crate::content::text::TextType::Static(t) => t.clone(),
+                        };
+                        match into {
+                            VideoChangesReplaceWith::List => VideoTypeEnum::List(vec![]),
+                            VideoChangesReplaceWith::AspectRatio => VideoTypeEnum::AspectRatio(Box::new(Video::new_full(VideoType::new(VideoTypeEnum::List(vec![])))), Curve::Constant(1.0), Curve::Constant(1.0)),
+                            VideoChangesReplaceWith::WithEffect => VideoTypeEnum::WithEffect(Box::new(Video::new_full(VideoType::new(VideoTypeEnum::List(vec![])))), crate::effect::Effect::new_from_enum(crate::effect::effects::EffectsEnum::Nothing(crate::effect::effects::Nothing::new()))),
+                            VideoChangesReplaceWith::Text => unreachable!(),
+                            VideoChangesReplaceWith::Image => VideoTypeEnum::Image(crate::content::image::Image::new(text.into())),
+                            VideoChangesReplaceWith::Raw => unreachable!(),
+                            VideoChangesReplaceWith::Ffmpeg => VideoTypeEnum::Ffmpeg(crate::content::ffmpeg_vid::FfmpegVid::new(text.into())),
+                        }
+                    },
+                    // don't use any information of the old one
+                    (_, VideoChangesReplaceWith::List) => VideoTypeEnum::List(vec![]),
+                    (_, VideoChangesReplaceWith::AspectRatio) => VideoTypeEnum::AspectRatio(Box::new(Video::new_full(VideoType::new(VideoTypeEnum::List(vec![])))), Curve::Constant(1.0), Curve::Constant(1.0)),
+                    (_, VideoChangesReplaceWith::WithEffect) => VideoTypeEnum::WithEffect(Box::new(Video::new_full(VideoType::new(VideoTypeEnum::List(vec![])))), crate::effect::Effect::new_from_enum(crate::effect::effects::EffectsEnum::Nothing(crate::effect::effects::Nothing::new()))),
+                    (_, VideoChangesReplaceWith::Text) => VideoTypeEnum::Text(crate::content::text::Text::new(crate::content::text::TextType::Static("[some text]".to_string()))),
+                    (_, VideoChangesReplaceWith::Image) => VideoTypeEnum::Image(crate::content::image::Image::new("[image]".into())),
+                    (_, VideoChangesReplaceWith::Ffmpeg) => VideoTypeEnum::Ffmpeg(crate::content::ffmpeg_vid::FfmpegVid::new("[video]".into())),
+                };
+                self.video.vt = new;
+                out = true;
             }
         }
         out && !err

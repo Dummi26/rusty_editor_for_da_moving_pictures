@@ -198,7 +198,12 @@ struct EtTime {
                                 1 => self.start = ((mouse_pos.0 as f64 - 0.05) / 0.9).max(0.0).min(self.end),
                                 2 => self.end = ((mouse_pos.0 as f64 - 0.05) / 0.9).max(self.start).min(1.0),
                                 3 => {
-                                    supr.data().requests.push(EditorWindowLayoutRequest::EditingChangesApply(VideoChanges { pos: None, start: Some(self.start), length: Some(self.end - self.start), video: None, wrap: None }));
+                                    supr.data().requests.push(EditorWindowLayoutRequest::EditingChangesApply(
+                                        VideoChanges {
+                                            pos: None, start: Some(self.start), length: Some(self.end - self.start),
+                                            video: None, wrap: None, replace: None,
+                                        }
+                                    ));
                                 },
                                 _ => (),
                             };
@@ -221,9 +226,11 @@ struct EtTime {
 }
 
 struct EtChangeType {
+    possibilities: Option<Vec<(String, Option<crate::video::VideoChangesReplaceWith>)>>,
 } impl EtChangeType {
     pub fn new() -> Self {
         Self {
+            possibilities: None,
         }
     }
 } impl ExtraTabsInfo for EtChangeType {
@@ -232,12 +239,88 @@ struct EtChangeType {
         graphics.draw_line(Vector2 { x: position.0, y: position.1 }, Vector2 { x: position.0 + position.2, y: position.1 + position.3 }, 1.0, shared_data.unified_color);
     }
     fn draw(&mut self, supr: &mut VideoPropertiesEditor, draw_opts: &mut crate::gui::speedy2d::layout::EditorWindowLayoutContentDrawOptions, graphics: &mut speedy2d::Graphics2D, position: &(f32, f32, f32, f32), input: &mut crate::gui::speedy2d::layout::UserInput) {
+        if self.possibilities.is_none() {
+            if let Some((_, editing)) = &supr.editing.0 {
+                self.possibilities = Some(match &editing.video.vt {
+                    VideoTypeEnum::List(..) => vec![
+                        ("first element in aspect ratio".to_string(), Some(crate::video::VideoChangesReplaceWith::AspectRatio)),
+                        ("first element with effect".to_string(), Some(crate::video::VideoChangesReplaceWith::WithEffect)),
+                    ],
+                    VideoTypeEnum::AspectRatio(..) => vec![
+                        ("list".to_string(), Some(crate::video::VideoChangesReplaceWith::List)),
+                    ],
+                    VideoTypeEnum::WithEffect(..) => vec![
+                        ("list".to_string(), Some(crate::video::VideoChangesReplaceWith::List)),
+                    ],
+                    VideoTypeEnum::Text(t) => match t.text() {
+                        crate::content::text::TextType::Static(_) => vec![
+                            ("image (using this as its path)".to_string(), Some(crate::video::VideoChangesReplaceWith::Image)),
+                            ("video (with this as its path)".to_string(), Some(crate::video::VideoChangesReplaceWith::Ffmpeg)),
+                        ],
+                    },
+                    VideoTypeEnum::Image(..) => vec![
+                        ("text (showing the path)".to_string(), Some(crate::video::VideoChangesReplaceWith::Text)),
+                        ("video (with the same path)".to_string(), Some(crate::video::VideoChangesReplaceWith::Ffmpeg)),
+                    ],
+                    VideoTypeEnum::Raw(..) => vec![
+                        ("text (showing the path)".to_string(), Some(crate::video::VideoChangesReplaceWith::Text)),
+                        ("video (with the same path)".to_string(), Some(crate::video::VideoChangesReplaceWith::Ffmpeg)),
+                        ("image (with the same path)".to_string(), Some(crate::video::VideoChangesReplaceWith::Image)),
+                    ],
+                    VideoTypeEnum::Ffmpeg(..) => vec![
+                        ("text (showing the path)".to_string(), Some(crate::video::VideoChangesReplaceWith::Text)),
+                        ("image (with the same path)".to_string(), Some(crate::video::VideoChangesReplaceWith::Image)),
+                    ],
+                });
+            }
+        }
+        let vis = draw_opts.visibility_factors.video_properties_editor_tabs;
+        if let Some(possibilities) = &self.possibilities {
+            if ! possibilities.is_empty() {
+                let element_height = position.3 / possibilities.len() as f32;
+                for (i, possibility) in possibilities.iter().enumerate() {
+                    let y = position.1 + position.3 * i as f32 / possibilities.len() as f32;
+                    let txt = draw_opts.assets_manager.get_default_font().layout_text(possibility.0.as_str(), 0.5 * element_height, TextOptions::new());
+                    graphics.draw_text(Vector2 { x: position.0, y: y + element_height * 0.25 }, Color::from_rgba(1.0, 1.0, 1.0, vis), &txt);
+                }
+            }
+        }
     }
     fn handle_input(&mut self, supr: &mut VideoPropertiesEditor, draw_opts: &mut crate::gui::speedy2d::layout::EditorWindowLayoutContentDrawOptions, input: &mut crate::gui::speedy2d::layout::UserInput) {
+        match &input.owned.action {
+            crate::gui::speedy2d::layout::InputAction::None => (),
+            crate::gui::speedy2d::layout::InputAction::Mouse(action) => match action {
+                MouseAction::Moved => (),
+                MouseAction::ButtonDown(btn) => match btn {
+                    _ => (),
+                },
+                MouseAction::ButtonUp(btn) => match btn {
+                    speedy2d::window::MouseButton::Left => {
+                        if let Some(possibilities) = &self.possibilities {
+                            if possibilities.len() > 0 {
+                                let (mx, my) = input.clonable.mouse_pos.clone();
+                                println!("Mouse @ {}|{}", mx, my);
+                                if mx >= 0.0 && mx <= 1.0 && my >= 0.0 && my <= 1.0 {
+                                    if let Some((_, Some(p))) = possibilities.get((my * possibilities.len() as f32) as usize) {
+                                        let changes = VideoChanges { pos: None, start: None, length: None, video: None, wrap: None, replace: Some(p.clone()), };
+                                        supr.data().requests.push(EditorWindowLayoutRequest::EditingChangesApply(changes));
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    _ => (),
+                },
+                MouseAction::Scroll(_) => (),
+            },
+            crate::gui::speedy2d::layout::InputAction::Keyboard(action) => match action {
+                _ => (),
+            },
+        }
     }
     fn update(&mut self, supr: &mut VideoPropertiesEditor, ud: ETUpdate) {
         match ud {
-            ETUpdate::VideoWasUpdated(_) => (),
+            ETUpdate::VideoWasUpdated(_) => self.possibilities = None,
         }
     }
 }
@@ -368,7 +451,7 @@ struct EtListAdd {
                             _ => None,
                         };
                         if let Some(inner_changes) = inner_changes {
-                            let changes = VideoChanges { pos: None, start: None, length: None, video: Some(VideoTypeChanges::List(vec![inner_changes])), wrap: None };
+                            let changes = VideoChanges { pos: None, start: None, length: None, video: Some(VideoTypeChanges::List(vec![inner_changes])), wrap: None, replace: None, };
                             supr.data().requests.push(EditorWindowLayoutRequest::EditingChangesApply(changes));
                         };
                     };
@@ -552,9 +635,6 @@ struct SharedEtData {
 
 //
 
-struct ExtraTabCurve {
-    curve: Curve,
-}
 enum RelOrAbs { Rel(f32), Abs(f32), }
 
 impl VideoPropertiesEditor {
