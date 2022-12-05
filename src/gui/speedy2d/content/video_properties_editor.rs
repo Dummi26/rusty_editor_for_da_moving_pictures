@@ -406,6 +406,25 @@ struct EtListAdd {
 } impl ExtraTabsInfo for EtListAdd {
     fn title(&self) -> StringTypeForExtraTabTitle { "add a video to the list".into() }
     fn draw_icon(&mut self, vis: f32, hovered: f32, selected: f32, graphics: &mut speedy2d::Graphics2D, position: &(f32, f32, f32, f32), shared_data: &SharedEtData) {
+        let (sin, cos) = if hovered == 0.0 && (selected == 0.0 || selected == 1.0)  {
+            (0.0, 1.0)
+        } else if hovered == 1.0 && (selected == 0.0 || selected == 1.0) {
+            (1.0, 0.0)
+        } else {
+            let ang = std::f32::consts::PI * (hovered + hovered*hovered - 1.5*hovered*hovered*hovered + 0.5 * selected);
+            (ang.sin(), ang.cos())
+        };
+        let color = shared_data.unified_color; // Color::from_rgba(1.0, 1.0, 1.0, vis);
+        let max_size = (position.2).min(position.3);
+        let h = 0.35 * max_size;
+        let t = 1.0 + 0.03 * (1.0 - (hovered - selected).abs()) * max_size;
+        let mid = Vector2 { x: position.0 + 0.5 * position.2, y: position.1 + 0.5 * position.3 };
+        let p1 = Vector2 { x: mid.x + sin * h, y: mid.y + cos * h };
+        let p2 = Vector2 { x: mid.x - sin * h, y: mid.y - cos * h };
+        let p3 = Vector2 { x: mid.x + cos * h, y: mid.y - sin * h };
+        let p4 = Vector2 { x: mid.x - cos * h, y: mid.y + sin * h };
+        graphics.draw_line(p1, p2, t, color);
+        graphics.draw_line(p3, p4, t, color);
     }
     fn draw(&mut self, supr: &mut VideoPropertiesEditor, draw_opts: &mut crate::gui::speedy2d::layout::EditorWindowLayoutContentDrawOptions, graphics: &mut speedy2d::Graphics2D, position: &(f32, f32, f32, f32), input: &mut crate::gui::speedy2d::layout::UserInput) {
         let vis = draw_opts.visibility_factors.video_properties_editor_tabs;
