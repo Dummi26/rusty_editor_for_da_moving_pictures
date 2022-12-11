@@ -89,19 +89,23 @@ impl Text {
             },
         }
     }
-    pub fn draw(&mut self, image: &mut DynamicImage, prog: f64) {
+    pub fn draw(&mut self, image: &mut DynamicImage, prog: f64, align_anchor: (f64, f64)) {
         let text = self.get_text(prog);
         if let Some(font) = &self.font {
             let c = self.color.get_rgba(prog);
             let dimensions = imageproc::drawing::text_size(rusttype::Scale::uniform(image.height() as f32), font, &text);
-            let factor = if dimensions.0 as u32 > image.width() {
-                image.width() as f32 / dimensions.0 as f32
-            } else { 1.0 };
+            let (factor, x, y) = if dimensions.0 as u32 > image.width() {
+                let f = image.width() as f64 / dimensions.0 as f64;
+                (f, 0, ((image.height() as f64 - dimensions.1 as f64 * f) * align_anchor.1).round() as _)
+            } else {
+                (1.0, ((image.width() as f64 - dimensions.0 as f64 /* free space */) * align_anchor.0).round() as _, 0)
+            };
+            let height = (image.height() as f64 * factor) as _;
             imageproc::drawing::draw_text_mut(image, image::Rgba { 0: [
                 (255.0 * c.0).round() as u8,
                 (255.0 * c.1).round() as u8,
                 (255.0 * c.2).round() as u8,
-                (255.0 * c.3).round() as u8] }, 0, 0, rusttype::Scale::uniform(image.height() as f32 * factor), font, &text);
+                (255.0 * c.3).round() as u8] }, x, y, rusttype::Scale::uniform(height), font, &text);
         } else {
             println!("Cannot draw text: No font specified.");
         }

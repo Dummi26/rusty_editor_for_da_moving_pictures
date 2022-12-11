@@ -412,7 +412,7 @@ impl Video {
 
 
             VideoTypeEnum::Text(txt) => {
-                txt.draw(image, progress)
+                txt.draw(image, progress, self.set_pos.align.convert(|c| c.get_value(progress)).get_anchor(0.0, 0.5, 1.0))
             },
 
 
