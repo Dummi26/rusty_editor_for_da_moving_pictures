@@ -343,7 +343,7 @@ impl Video {
                         (or as f32 * a2 + nr as f32 * alpha).round() as u8,
                         (og as f32 * a2 + ng as f32 * alpha).round() as u8,
                         (ob as f32 * a2 + nb as f32 * alpha).round() as u8,
-                        255
+                        (oa as f32 + (255.0 - oa as f32) * alpha).round() as u8, // TODO: verify that this actually makes sense
                     ]));
                 };
             };
