@@ -439,18 +439,21 @@ impl Video {
                     let my_aspect_ratio = render_settings.this_frame.out_vid_aspect_ratio
                         * (render_settings.this_frame.my_size.0/* * prep_draw.position.w*/) / (render_settings.this_frame.my_size.1/* * prep_draw.position.h*/);
                     // println!("My AR: {}", my_aspect_ratio);
-                    let desired_aspect_ratio = width.get_value(progress) / height.get_value(progress);
-                    let (anchor_x, anchor_y) = prep_draw.position.align.get_anchor(0.0, 0.5, 1.0);
-                    if my_aspect_ratio > desired_aspect_ratio { // too wide
-                        let w = desired_aspect_ratio / my_aspect_ratio; // < 1
-                        let x = (1.0 - w) * anchor_x;
-                        prep_draw.position.w *= w;
-                        prep_draw.position.x = x + prep_draw.position.x * w;
-                    } else if my_aspect_ratio < desired_aspect_ratio { // too high
-                        let h = my_aspect_ratio / desired_aspect_ratio; // < 1
-                        let y = (1.0 - h) * anchor_y;
-                        prep_draw.position.h *= h;
-                        prep_draw.position.y = y + prep_draw.position.y * h;
+                    let (width, height) = (width.get_value(progress), height.get_value(progress));
+                    if height != 0.0 {
+                        let desired_aspect_ratio = width / height;
+                        let (anchor_x, anchor_y) = prep_draw.position.align.get_anchor(0.0, 0.5, 1.0);
+                        if my_aspect_ratio > desired_aspect_ratio { // too wide
+                            let w = desired_aspect_ratio / my_aspect_ratio; // < 1
+                            let x = (1.0 - w) * anchor_x;
+                            prep_draw.position.w *= w;
+                            prep_draw.position.x = x + prep_draw.position.x * w;
+                        } else if my_aspect_ratio < desired_aspect_ratio { // too high
+                            let h = my_aspect_ratio / desired_aspect_ratio; // < 1
+                            let y = (1.0 - h) * anchor_y;
+                            prep_draw.position.h *= h;
+                            prep_draw.position.y = y + prep_draw.position.y * h;
+                        }
                     }
                     vid.draw(image, prep_draw, render_settings);
                 };
