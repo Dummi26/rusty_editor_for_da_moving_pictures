@@ -112,6 +112,7 @@ impl EditorWindowLayoutContentTrait for QVidRunner {
                                 }
                                 false
                             },
+                            useful::CharOrAction::Esc => false,
                             useful::CharOrAction::Ignored => false,
                         };
                         if exec { // exec BEFORE setting new query!

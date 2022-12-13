@@ -594,6 +594,7 @@ struct EtPath {
                     },
                     useful::CharOrAction::Delete => (),
                     useful::CharOrAction::Tab => (),
+                    useful::CharOrAction::Esc => (),
                     useful::CharOrAction::Ignored => (),
                 },
             },

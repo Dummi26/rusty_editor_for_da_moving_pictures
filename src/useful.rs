@@ -13,12 +13,13 @@ impl<'a, T> MightBeRef<'a, T> {
 
 impl From<&char> for CharOrAction {
     fn from(ch: &char) -> Self {
-        //let mut buf = [0u8; 4]; eprintln!("'{}' ({:?})", ch, ch.encode_utf8(&mut buf));
+        // let mut buf = [0u8; 4]; eprintln!("'{}'\n{:?}", ch, ch.encode_utf8(&mut buf));
         match ch {
             '\n' | '\r' => Self::Enter,
             '\x08' => Self::Backspace,
             '\x7F' => Self::Delete,
             '\t' => Self::Tab,
+            '\u{1b}' => Self::Esc,
             ch => Self::Char(ch.clone()),
             _ => Self::Ignored,
         }
@@ -31,6 +32,7 @@ pub enum CharOrAction {
     Delete,
     Tab,
     Ignored,
+    Esc,
 }
 
 pub fn get_elem_from_index_recursive<'a>(vid: &'a crate::video::Video, index: &mut u32) -> Option<&'a crate::video::Video> {
