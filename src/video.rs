@@ -1,4 +1,4 @@
-use image::{DynamicImage, GenericImageView, GenericImage, Pixel, Rgba};
+use image::{DynamicImage, GenericImage, GenericImageView};
 
 use crate::{curve::Curve, video_render_settings::VideoRenderSettings, content::{content::Content, image::ImageChanges, input_video::InputVideoChanges}, cli::Clz};
 
@@ -10,8 +10,8 @@ pub struct Video {
     pub set_length: f64,
     /// The video
     pub video: VideoType,
-    /// Post-Processing, effectively
-    pub transparency_adjustments: TransparencyAdjustments<Curve>,
+    /// how to write the pixels onto the underlying surface. If None, inherits from parent.
+    pub compositing: Option<CompositingMethod>,
     // - -     -     - -
     // done: The values that are set after drawing
     /// Due to caching, the rendered image might not be exactly the desired one. If this is the case, this value will differ from the progress used by draw() etc.
@@ -226,7 +226,7 @@ impl Video {
             set_start_frame: 0.0,
             set_length: 1.0,
             video,
-            transparency_adjustments: TransparencyAdjustments::None,
+            compositing: None,
             generic_content_data: crate::content::content::GenericContentData::default(),
             as_content_changes: VideoChanges::default(),
         }
@@ -237,7 +237,7 @@ impl Video {
             set_start_frame: start_frame,
             set_length: length,
             video,
-            transparency_adjustments: TransparencyAdjustments::None,
+            compositing: None,
             generic_content_data: crate::content::content::GenericContentData::default(),
             as_content_changes: VideoChanges::default(),
         }
@@ -248,13 +248,13 @@ impl Video {
             set_start_frame: start_frame,
             set_length: length,
             video,
-            transparency_adjustments: TransparencyAdjustments::None,
+            compositing: None,
             generic_content_data: crate::content::content::GenericContentData::default(),
             as_content_changes: VideoChanges::default(),
         }
     }
 
-    pub fn prep_draw(&self, outer_progress: f64) -> Option<PrepDrawData> {
+    pub fn prep_draw(&self, outer_progress: f64, parent_data: Option<&PrepDrawData>) -> Option<PrepDrawData> {
         // handle outer_progress
         if outer_progress < self.set_start_frame { return None; };
         let frames_since_start = outer_progress - self.set_start_frame;
@@ -262,210 +262,99 @@ impl Video {
         if self.set_length <= 0.0 { return None; }
         let progress = frames_since_start / self.set_length;
         //
-        Some(PrepDrawData {
-            position: self.set_pos.convert(&|c| c.get_value(progress)),
+        let position = self.set_pos.convert(&|c| c.get_value(progress));
+        let pos_px = if let Some(pd) = parent_data {
+            Some(pd.pos_px)
+        } else { None };
+        let mut pdd = PrepDrawData {
+            pos_px_from_canvas: pos_px.is_none(),
+            pos_px: match pos_px { None => (0.0, 0.0, 0.0, 0.0), Some(v) => v },
+            position,
             progress,
-            transparency_adjustments: self.transparency_adjustments.clone(),
+            compositing: if let Some(v) = &self.compositing { v.clone() } else { if let Some(pd) = parent_data { pd.compositing.clone() } else { CompositingMethod::Ignore } },
             _private: (),
-        })
+        };
+        if pos_px.is_some() {
+            pdd.calc_pos_px();
+        }
+        Some(pdd)
     }
 }
 pub struct PrepDrawData {
     pub progress: f64,
     pub position: Pos<f64, f64>,
-    pub transparency_adjustments: TransparencyAdjustments<Curve>,
+    pub pos_px: (f64, f64, f64, f64),
+    pub pos_px_from_canvas: bool,
+    pub compositing: CompositingMethod,
     /// This prevents construction of this struct
     _private: (),
 }
+impl PrepDrawData {
+    /// if pos_px is set to the parent's values, this function changes it to the correct ones (based on position)
+    pub fn calc_pos_px(&mut self) {
+        let tl = self.position.top_left_xy();
+        self.pos_px = (
+            self.pos_px.0 + self.pos_px.2 * tl.0,
+            self.pos_px.1 + self.pos_px.3 * tl.1,
+            self.pos_px.2 * self.position.w,
+            self.pos_px.3 * self.position.h,
+        )
+    }
+}
+
 impl Video {
     /// This may only be called after prep_draw (which is why it consumes PrepDrawData).
     /// Between prep_draw and draw, effects can make some changes to the PrepDrawData.
-    pub fn draw(&mut self, img: &mut DynamicImage, prep_data: PrepDrawData, render_settings: &mut VideoRenderSettings) {
-        //
-        let pos_xy = prep_data.position.top_left_xy();
-        let pos = Pos { align: PosAlign::TopLeft, x: (pos_xy.0 * img.width() as f64).round() as i32, y: (pos_xy.1 * img.height() as f64).round() as i32, w: (prep_data.position.w * img.width() as f64).round() as u32, h: (prep_data.position.h * img.height() as f64).round() as u32 };
-        let prev_frame = render_settings.this_frame.my_size;
-        render_settings.this_frame.my_size.0 *= prep_data.position.w;
-        render_settings.this_frame.my_size.1 *= prep_data.position.h;
-        //
-        self.draw2(img, prep_data, pos, render_settings);
-        // reset
-        render_settings.this_frame.my_size = prev_frame;
-    }
-
-    fn draw2(&mut self, image: &mut DynamicImage, prep_data: PrepDrawData, pos: Pos<i32, u32>, render_settings: &mut VideoRenderSettings) {
-
-        let progress = prep_data.progress;
-
-        {
-            // Rendering
-            let img = self.create_rendered_image(&pos, progress, render_settings);
-            // Drawing
-            draw_to_canvas(image, &pos, &img, prep_data.transparency_adjustments.convert(&|c| c.get_value(progress) as f32));
-        };
-        fn draw_to_canvas(image: &mut DynamicImage, pos: &Pos<i32, u32>, img: &DynamicImage, transparency_adjustments: TransparencyAdjustments<f32>) {
-
-            // Draw frame to canvas
-    
-            let cropped_left = pos.x < 0;
-            let cropped_left_by = if cropped_left { -pos.x as u32 } else { 0 };
-            let cropped_top = pos.y < 0;
-            let cropped_top_by = if cropped_top { -pos.y as u32 } else { 0 };
-            //let cropped_right = add(pos.x, pos.w) > image.width();
-            //let cropped_bottom = add(pos.y, pos.h) > image.height();
-            
-            /// Panicks if i is negative and -i > u
-            fn add(i: i32, u: u32) -> u32 { if i < 0 { u - (-i) as u32 } else { u + i as u32 } }
-    
-            for pixel in img.pixels() {
-                let (x, y, pixel) = (pixel.0, pixel.1, pixel.2);
-                // ensure our x and y coordinates for put_pixel are not negative
-                if (cropped_left && x < cropped_left_by) // pixel out on left
-                || (cropped_top && y < cropped_top_by) // pixel out on top
-                { continue; };
-                let (x, y) = (add(pos.x, x), add(pos.y, y));
-                if x >= image.width() || y >= image.height() { continue; };
-                let px = image.get_pixel(x, y);
-                let [nr, ng, nb, na] = pixel.0;
-                let [or, og, ob, oa] = px.0;
-                let alpha = match transparency_adjustments {
-                    TransparencyAdjustments::None => na as f32 / 255.0,
-                    TransparencyAdjustments::Force(v) => v,
-                    TransparencyAdjustments::Factor(f) => na as f32 * f / 255.0,
-                    TransparencyAdjustments::ForceOpaqueIfNotTransparent => if na == 0 { 0.0 } else { 1.0 },
-                };
-                if alpha == 0.0 {} // nothing
-                else if alpha == 1.0 { // opaque
-                    image.put_pixel(x, y, *Rgba::from_slice(&[nr, ng, nb, 255]));
-                } else { // transparency
-                    let a2 = 1.0 - alpha;
-                    image.put_pixel(x, y, *Rgba::from_slice(&[
-                        (or as f32 * a2 + nr as f32 * alpha).round() as u8,
-                        (og as f32 * a2 + ng as f32 * alpha).round() as u8,
-                        (ob as f32 * a2 + nb as f32 * alpha).round() as u8,
-                        (oa as f32 + (255.0 - oa as f32) * alpha).round() as u8, // TODO: verify that this actually makes sense
-                    ]));
-                };
-            };
-        
+    pub fn draw(&mut self, img: &mut DynamicImage, mut prep_data: PrepDrawData, render_settings: &mut VideoRenderSettings) {
+        if prep_data.pos_px_from_canvas {
+            prep_data.pos_px = (0.0, 0.0, img.width() as _, img.height() as _);
+            prep_data.calc_pos_px();
         }
+        self.draw2(img, prep_data, render_settings);
     }
+
+    fn draw2(&mut self, image: &mut DynamicImage, prep_data: PrepDrawData, render_settings: &mut VideoRenderSettings) {
+        // Rendering
+        self.video.draw_on(image, prep_data, render_settings);
+    }
+}
+
+pub trait Drawable {
+    /// Make sure to respect the compositing method and position in prep_data!
+    fn draw_on(&mut self, image: &mut DynamicImage, prep_data: PrepDrawData, render_settings: &mut VideoRenderSettings);
 }
 
 #[derive(Clone)]
-pub enum TransparencyAdjustments<T> {
-    None,
-    Force(T),
-    Factor(T),
-    ForceOpaqueIfNotTransparent,
+pub enum CompositingMethod {
+    Ignore,
+    /// Writes the pixels directly to the output buffer. Any color data that was previously there will be destroyed.
+    Opaque,
+    /// Like Opaque, but writes the alpha channel to the output buffer.
+    Direct,
+    /// Based on the alpha value of each pixel, merges what was there before with what is there now.
+    TransparencySupport,
+    Manual(crate::external_program::ExternalProgram),
 }
-impl<T> TransparencyAdjustments<T> {
-    pub fn convert<F, R>(self, f: &F) -> TransparencyAdjustments<R> where F: Fn(T) -> R {
-        match self {
-            Self::None => TransparencyAdjustments::None,
-            Self::Force(t) => TransparencyAdjustments::Force(f(t)),
-            Self::Factor(t) => TransparencyAdjustments::Factor(f(t)),
-            Self::ForceOpaqueIfNotTransparent => TransparencyAdjustments::ForceOpaqueIfNotTransparent,
-        }
-    }
-}
+
+// #[derive(Clone)]
+// pub enum TransparencyAdjustments<T> {
+//     None,
+//     Force(T),
+//     Factor(T),
+//     ForceOpaqueIfNotTransparent,
+// }
+// impl<T> TransparencyAdjustments<T> {
+//     pub fn convert<F, R>(self, f: &F) -> TransparencyAdjustments<R> where F: Fn(T) -> R {
+//         match self {
+//             Self::None => TransparencyAdjustments::None,
+//             Self::Force(t) => TransparencyAdjustments::Force(f(t)),
+//             Self::Factor(t) => TransparencyAdjustments::Factor(f(t)),
+//             Self::ForceOpaqueIfNotTransparent => TransparencyAdjustments::ForceOpaqueIfNotTransparent,
+//         }
+//     }
+// }
 
 impl Video {
-
-
-    /// This function does not put the image into the cache automatically. To do that, use self.last_draw.add_frame(?, ?, ?, create_rendered_image(...))
-    fn create_rendered_image(&mut self, pos: &Pos<i32, u32>, progress: f64, render_settings: &mut VideoRenderSettings) -> DynamicImage {
-        let mut img = DynamicImage::new_rgba8(pos.w, pos.h);
-        self.draw3(progress, render_settings, &mut img); // draw onto this image
-        img
-    }
-
-
-    /// crop: new min x and y (0 if not cropped), new right and bottom bounds (original width and height if not cropped or only cropped on left and/or top, otherwise width or height minus cropped pixels)
-    fn draw3(&mut self, progress: f64, render_settings: &mut VideoRenderSettings, image: &mut DynamicImage) {
-
-        match &mut self.video.vt {
-
-
-
-            VideoTypeEnum::Raw(raw_img) => {
-                //println!("Drawing RAW");
-                let img = raw_img.get_frame_fast(progress, render_settings.max_distance_when_retrieving_closest_frame);
-                if let Some(img) = img {
-                    img.draw(image, render_settings.image_scaling_filter_type);
-                };
-            },
-
-
-
-            VideoTypeEnum::Ffmpeg(vid) => {
-                vid.load_img_force_factor(progress);
-                vid.draw(image, render_settings.image_scaling_filter_type)
-            },
-
-
-
-            VideoTypeEnum::Image(img) => {
-                img.draw(image, render_settings.image_scaling_filter_type)
-            },
-
-
-
-            VideoTypeEnum::Text(txt) => {
-                txt.draw(image, progress, self.set_pos.align.convert(|c| c.get_value(progress)).get_anchor(0.0, 0.5, 1.0))
-            },
-
-
-
-            VideoTypeEnum::WithEffect(vid, effect) => {
-                effect.process_image(progress, vid, image, render_settings);
-            },
-
-
-
-            VideoTypeEnum::List(others) => {
-                //println!("Drawing LIST");
-                for other in others {
-                    if let Some(prep_draw) = other.prep_draw(progress) {
-                        other.draw(image, prep_draw, render_settings);
-                    };
-                };
-            },
-
-
-
-            VideoTypeEnum::AspectRatio(vid, width, height) => {
-                if let Some(mut prep_draw) = vid.prep_draw(progress) {
-                    let my_aspect_ratio = render_settings.this_frame.out_vid_aspect_ratio
-                        * (render_settings.this_frame.my_size.0/* * prep_draw.position.w*/) / (render_settings.this_frame.my_size.1/* * prep_draw.position.h*/);
-                    // println!("My AR: {}", my_aspect_ratio);
-                    let (width, height) = (width.get_value(progress), height.get_value(progress));
-                    if height != 0.0 {
-                        let desired_aspect_ratio = width / height;
-                        let (anchor_x, anchor_y) = prep_draw.position.align.get_anchor(0.0, 0.5, 1.0);
-                        if my_aspect_ratio > desired_aspect_ratio { // too wide
-                            let w = desired_aspect_ratio / my_aspect_ratio; // < 1
-                            let x = (1.0 - w) * anchor_x;
-                            prep_draw.position.w *= w;
-                            prep_draw.position.x = x + prep_draw.position.x * w;
-                        } else if my_aspect_ratio < desired_aspect_ratio { // too high
-                            let h = my_aspect_ratio / desired_aspect_ratio; // < 1
-                            let y = (1.0 - h) * anchor_y;
-                            prep_draw.position.h *= h;
-                            prep_draw.position.y = y + prep_draw.position.y * h;
-                        }
-                    }
-                    vid.draw(image, prep_draw, render_settings);
-                };
-            },
-
-
-
-        };
-    }
-
-
-
 
     /// Assumes align is set to TopLeft!
     fn get_inner_pos(pos_outer: &Pos<i32, u32>, pos_inner: &Pos<f64, f64>) -> Pos<i32, u32> {
@@ -485,6 +374,11 @@ pub struct VideoType {
     changes: Option<VideoTypeChanges>,
 } impl VideoType { pub fn new(vt: VideoTypeEnum) -> Self { Self { vt, changes: None, generic_content_data: crate::content::content::GenericContentData::default(), }
 } }
+impl Drawable for VideoType {
+    fn draw_on(&mut self, image: &mut DynamicImage, prep_data: PrepDrawData, render_settings: &mut VideoRenderSettings) {
+        self.vt.draw_on(image, prep_data, render_settings);
+    }
+}
 pub enum VideoTypeEnum {
     List(Vec<Video>),
     AspectRatio(Box<Video>, Curve, Curve),
@@ -494,6 +388,161 @@ pub enum VideoTypeEnum {
     Raw(crate::content::input_video::InputVideo),
     Ffmpeg(crate::content::ffmpeg_vid::FfmpegVid),
 }
+
+
+
+
+
+
+
+
+
+
+impl Drawable for VideoTypeEnum {
+    fn draw_on(&mut self, image: &mut DynamicImage, prep_data: PrepDrawData, render_settings: &mut VideoRenderSettings) {
+        match self {
+
+
+
+            Self::Raw(raw_img) => {
+                //println!("Drawing RAW");
+                let img = raw_img.get_frame_fast(prep_data.progress, render_settings.max_distance_when_retrieving_closest_frame);
+                if let Some(img) = img {
+                    img.draw(image, &prep_data, render_settings.image_scaling_filter_type);
+                };
+            },
+
+
+
+            Self::Ffmpeg(vid) => {
+                vid.load_img_force_factor(prep_data.progress);
+                vid.draw(image, &prep_data, render_settings.image_scaling_filter_type)
+            },
+
+
+
+            Self::Image(img) => {
+                img.draw(image, &prep_data, render_settings.image_scaling_filter_type)
+            },
+
+
+
+            Self::Text(txt) => {
+                txt.draw(image, &prep_data, prep_data.position.align.get_anchor(0.0, 0.5, 1.0))
+            },
+
+
+
+            Self::WithEffect(vid, effect) => {
+                effect.process_image(prep_data.progress, vid, image, render_settings, &prep_data);
+            },
+
+
+
+            Self::List(others) => {
+                match prep_data.compositing {
+                    CompositingMethod::Ignore => (),
+                    _ => for other in others {
+                        if let Some(prep_draw) = other.prep_draw(prep_data.progress, Some(&prep_data)) {
+                            other.draw(image, prep_draw, render_settings);
+                        }
+                    },
+                }
+            },
+
+
+
+            Self::AspectRatio(vid, width, height) => {
+                if let Some(mut prep_draw) = vid.prep_draw(prep_data.progress, Some(&prep_data)) {
+                    let my_aspect_ratio = render_settings.this_frame.out_vid_aspect_ratio
+                        * (prep_draw.pos_px.2) / (prep_draw.pos_px.3);
+                    // println!("My AR: {}", my_aspect_ratio);
+                    let (width, height) = (width.get_value(prep_data.progress), height.get_value(prep_data.progress));
+                    if height != 0.0 {
+                        let desired_aspect_ratio = width / height;
+                        let (anchor_x, anchor_y) = prep_draw.position.align.get_anchor(0.0, 0.5, 1.0);
+                        if my_aspect_ratio > desired_aspect_ratio { // too wide
+                            let w = desired_aspect_ratio / my_aspect_ratio; // < 1
+                            let x = (1.0 - w) * anchor_x;
+                            prep_draw.position.w *= w;
+                            prep_draw.position.x = x + prep_draw.position.x * w;
+                        } else if my_aspect_ratio < desired_aspect_ratio { // too high
+                            let h = my_aspect_ratio / desired_aspect_ratio; // < 1
+                            let y = (1.0 - h) * anchor_y;
+                            prep_draw.position.h *= h;
+                            prep_draw.position.y = y + prep_draw.position.y * h;
+                        }
+                    }
+                    vid.draw(image, prep_draw, render_settings);
+                };
+            },
+        }
+    }
+}
+
+
+
+
+
+
+
+
+
+
+/// Draws the image onto the other one, following the compositing method and position provided by prep_draw.
+pub fn composite_images(image: &mut DynamicImage, img: &DynamicImage, prep_draw: &PrepDrawData) {
+    let pos = (prep_draw.pos_px.0.ceil() as i32, prep_draw.pos_px.1.ceil() as i32, prep_draw.pos_px.2 as u32, prep_draw.pos_px.3 as u32);
+    match &prep_draw.compositing {
+        CompositingMethod::Ignore => (),
+        CompositingMethod::Opaque => for pixel in img.to_rgba8().enumerate_pixels() {
+            let (x, y, pixel) = (pixel.0, pixel.1, pixel.2);
+            let x = pos.0 + x as i32;
+            let y = pos.1 + y as i32;
+            if ! x.is_negative() && ! y.is_negative() && (x as u32) < image.width() && (y as u32) < image.height() {
+                image.put_pixel(x as _, y as _, image::Rgba { 0: [pixel.0[0], pixel.0[1], pixel.0[2], 255] });
+            }
+        },
+        CompositingMethod::Direct => for pixel in img.to_rgba8().enumerate_pixels() {
+            let (x, y, pixel) = (pixel.0, pixel.1, pixel.2);
+            let x = pos.0 + x as i32;
+            let y = pos.1 + y as i32;
+            if ! x.is_negative() && ! y.is_negative() && (x as u32) < image.width() && (y as u32) < image.height() {
+                image.put_pixel(x as _, y as _, pixel.clone());
+            }
+        },
+        CompositingMethod::TransparencySupport => for pixel in img.to_rgba8().enumerate_pixels() {
+            let (x, y, pixel) = (pixel.0, pixel.1, pixel.2);
+            let x = pos.0 + x as i32;
+            let y = pos.1 + y as i32;
+            if ! x.is_negative() && ! y.is_negative() && (x as u32) < image.width() && (y as u32) < image.height() {
+                let mut px = image.get_pixel(x as _, y as _).clone();
+                composite_pixels_transparency_support(&mut px.0, &pixel.0);
+                image.put_pixel(x as _, y as _, px);
+            }
+        },
+        CompositingMethod::Manual(_) => todo!("Manual compositing not yet supported for images."),
+    }
+}
+
+/// Draws onto old. This is to be used for CompositingMethod::TransparencySupport.
+pub fn composite_pixels_transparency_support(old: &mut [u8; 4], new: &[u8; 4]) {
+    let factor_new = new[3] as u16;
+    let factor_old = 255 - factor_new;
+    for i in 0..3 {
+        old[i] = ((old[i] as u16 * factor_old + new[i] as u16 * factor_new) / 255) as u8;
+    }
+    old[3] = 255;
+}
+
+
+
+
+
+
+
+
+
+
 pub enum VideoTypeChanges {
     List(Vec<VideoTypeChanges_List>),
     AspectRatio(Option<Box<VideoChanges>>, Option<Curve>, Option<Curve>),

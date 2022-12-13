@@ -23,12 +23,10 @@ impl VideoRenderSettings {
 }
 
 pub struct FrameRenderInfo {
-    pub my_size: (f64, f64),
     pub out_vid_aspect_ratio: f64,
 }
 impl FrameRenderInfo {
     pub fn new(out_vid_aspect_ratio: f64) -> Self { Self {
-        my_size: (1.0, 1.0),
         out_vid_aspect_ratio,
     } }
 }

@@ -15,7 +15,7 @@ pub fn export_to_dir(proj: &Project, settings: &crate::video_export_settings::Vi
             pprogress_percent = progress_percent;
             eprintln!("{:03}% done.", progress_percent);
         }
-        if let Some(prep_data) = vid.prep_draw(progress) {
+        if let Some(prep_data) = vid.prep_draw(progress, None) {
             let mut img = DynamicImage::new_rgba8(settings.width, settings.height);
             vid.draw(&mut img, prep_data, match &mut proj.proj.lock().unwrap().render_settings_export {
                 Some(v) => v,

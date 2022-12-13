@@ -54,7 +54,7 @@ impl<'a> Cli<'a> {
                     CliLine::Exit => break,
                     CliLine::Export(time, w, h, path) => {
                         let mut vid = self.project.vid.lock().unwrap();
-                        if let Some(prep_draw) = vid.prep_draw(time) {
+                        if let Some(prep_draw) = vid.prep_draw(time, None) {
                             let mut image = image::DynamicImage::new_rgba8(w, h);
                             let mut settings = crate::video_render_settings::VideoRenderSettings::export(crate::video_render_settings::FrameRenderInfo::new(w as f64 / h as f64));
                             vid.draw(&mut image, prep_draw, &mut settings);

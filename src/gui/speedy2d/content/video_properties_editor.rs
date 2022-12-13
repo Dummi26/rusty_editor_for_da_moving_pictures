@@ -1,10 +1,8 @@
-use core::num;
-use std::{sync::{Arc, Mutex}, time::{Instant, Duration}, path::{PathBuf, Path}};
+use std::{sync::{Arc, Mutex}, time::{Instant, Duration}, path::PathBuf};
 
-use egui::TextBuffer;
-use speedy2d::{dimen::Vector2, color::Color, font::{TextLayout, TextOptions, TextAlignment}, shape::Rectangle};
+use speedy2d::{dimen::Vector2, color::Color, font::{TextLayout, TextOptions, TextAlignment}};
 
-use crate::{video::{Video, VideoChanges, VideoTypeEnum, VideoTypeChanges, VideoTypeChanges_List, VideoType}, content::{content::Content, image::ImageChanges}, gui::speedy2d::{layout::{EditorWindowLayoutContentTrait, EditorWindowLayoutContentDrawMode, EditorWindowLayoutContentSDrawMode, EditorWindowLayoutContentData, CustomDrawActions, MouseAction}, content_list::{EditorWindowLayoutContent, EditorWindowLayoutContentEnum}, request::EditorWindowLayoutRequest}, effect::{self, effects::{EffectsEnum, EffectT}}, useful, curve::Curve};
+use crate::{video::{Video, VideoChanges, VideoTypeEnum, VideoTypeChanges, VideoTypeChanges_List, VideoType}, content::{content::Content, image::ImageChanges}, gui::speedy2d::{layout::{EditorWindowLayoutContentTrait, EditorWindowLayoutContentDrawMode, EditorWindowLayoutContentSDrawMode, EditorWindowLayoutContentData, CustomDrawActions, MouseAction}, content_list::{EditorWindowLayoutContent, EditorWindowLayoutContentEnum}, request::EditorWindowLayoutRequest}, effect::{self, effects::{EffectT}}, useful, curve::Curve};
 
 type StringTypeForExtraTabTitle<'a> = std::borrow::Cow<'a, str>;
 

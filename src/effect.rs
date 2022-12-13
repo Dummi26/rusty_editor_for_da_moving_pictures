@@ -1,4 +1,4 @@
-use image::{DynamicImage};
+use image::DynamicImage;
 
 use crate::{video::Video, video_render_settings::VideoRenderSettings};
 
@@ -15,8 +15,8 @@ impl Effect {
     pub fn new_from_enum(effect: effects::EffectsEnum) -> Self {
         Self { effect, }
     }
-    pub fn process_image(&mut self, progress: f64, vid: &mut Video, img: &mut DynamicImage, render_settings: &mut VideoRenderSettings) {
-        self.effect.process_image(progress, vid, img, render_settings);
+    pub fn process_image(&mut self, progress: f64, vid: &mut Video, img: &mut DynamicImage, render_settings: &mut VideoRenderSettings, parent_prep_draw_data: &crate::video::PrepDrawData) {
+        self.effect.process_image(progress, vid, img, render_settings, parent_prep_draw_data);
     }
     pub fn clone_no_caching(&self) -> Self {
         self.effect.clone_no_caching()
@@ -32,7 +32,7 @@ pub mod effects {
 
     pub trait EffectT: Send {
         /// The default implementation of this should just call prepare_draw and draw on vid.
-        fn process_image(&mut self, progress: f64, vid: &mut crate::video::Video, img: &mut super::DynamicImage, render_settings: &mut VideoRenderSettings);
+        fn process_image(&mut self, progress: f64, vid: &mut crate::video::Video, img: &mut super::DynamicImage, render_settings: &mut VideoRenderSettings, parent_prep_draw_data: &crate::video::PrepDrawData);
         /// 
         fn clone_no_caching(&self) -> super::Effect;
         
@@ -43,22 +43,22 @@ pub mod effects {
         BlackWhite(BlackWhite),
         Rotate(Rotate),
         Shake(Shake),
-        ChangeSpeed(ChangeSpeed),
+        ChangeTime(ChangeTime),
         ColorAdjust(ColorAdjust),
         Blur(Blur),
         ColorKey(ColorKey),
     }
     impl EffectT for EffectsEnum {
-        fn process_image(&mut self, progress: f64, vid: &mut crate::video::Video, img: &mut super::DynamicImage, render_settings: &mut VideoRenderSettings) {
+        fn process_image(&mut self, progress: f64, vid: &mut crate::video::Video, img: &mut super::DynamicImage, render_settings: &mut VideoRenderSettings, parent_prep_draw_data: &crate::video::PrepDrawData) {
             match self {
-                EffectsEnum::Nothing(v) => v.process_image(progress, vid, img, render_settings),
-                EffectsEnum::BlackWhite(v) => v.process_image(progress, vid, img, render_settings),
-                EffectsEnum::Rotate(v) => v.process_image(progress, vid, img, render_settings),
-                EffectsEnum::Shake(v) => v.process_image(progress, vid, img, render_settings),
-                EffectsEnum::ChangeSpeed(v) => v.process_image(progress, vid, img, render_settings),
-                EffectsEnum::ColorAdjust(v) => v.process_image(progress, vid, img, render_settings),
-                EffectsEnum::Blur(v) => v.process_image(progress, vid, img, render_settings),
-                EffectsEnum::ColorKey(v) => v.process_image(progress, vid, img, render_settings),
+                EffectsEnum::Nothing(v) => v.process_image(progress, vid, img, render_settings, parent_prep_draw_data),
+                EffectsEnum::BlackWhite(v) => v.process_image(progress, vid, img, render_settings, parent_prep_draw_data),
+                EffectsEnum::Rotate(v) => v.process_image(progress, vid, img, render_settings, parent_prep_draw_data),
+                EffectsEnum::Shake(v) => v.process_image(progress, vid, img, render_settings, parent_prep_draw_data),
+                EffectsEnum::ChangeTime(v) => v.process_image(progress, vid, img, render_settings, parent_prep_draw_data),
+                EffectsEnum::ColorAdjust(v) => v.process_image(progress, vid, img, render_settings, parent_prep_draw_data),
+                EffectsEnum::Blur(v) => v.process_image(progress, vid, img, render_settings, parent_prep_draw_data),
+                EffectsEnum::ColorKey(v) => v.process_image(progress, vid, img, render_settings, parent_prep_draw_data),
             }
         }
 
@@ -68,7 +68,7 @@ pub mod effects {
                 EffectsEnum::BlackWhite(v) => v.clone_no_caching(),
                 EffectsEnum::Rotate(v) => v.clone_no_caching(),
                 EffectsEnum::Shake(v) => v.clone_no_caching(),
-                EffectsEnum::ChangeSpeed(v) => v.clone_no_caching(),
+                EffectsEnum::ChangeTime(v) => v.clone_no_caching(),
                 EffectsEnum::ColorAdjust(v) => v.clone_no_caching(),
                 EffectsEnum::Blur(v) => v.clone_no_caching(),
                 EffectsEnum::ColorKey(v) => v.clone_no_caching(),
@@ -88,8 +88,8 @@ pub mod effects {
         Self {  }
     } }
     impl EffectT for Nothing {
-        fn process_image(&mut self, progress: f64, vid: &mut crate::video::Video, img: &mut image::DynamicImage, render_settings: &mut VideoRenderSettings) {
-            if let Some(prep_data) = vid.prep_draw(progress) {
+        fn process_image(&mut self, progress: f64, vid: &mut crate::video::Video, img: &mut image::DynamicImage, render_settings: &mut VideoRenderSettings, parent_prep_draw_data: &crate::video::PrepDrawData) {
+            if let Some(prep_data) = vid.prep_draw(progress, Some(parent_prep_draw_data)) {
                 vid.draw(img, prep_data, render_settings);
             };
         }
@@ -105,8 +105,8 @@ pub mod effects {
         Self {  }
     } }
     impl EffectT for BlackWhite {
-        fn process_image(&mut self, progress: f64, vid: &mut crate::video::Video, img: &mut image::DynamicImage, render_settings: &mut VideoRenderSettings) {
-            if let Some(prep_draw) = vid.prep_draw(progress) {
+        fn process_image(&mut self, progress: f64, vid: &mut crate::video::Video, img: &mut image::DynamicImage, render_settings: &mut VideoRenderSettings, parent_prep_draw_data: &crate::video::PrepDrawData) {
+            if let Some(prep_draw) = vid.prep_draw(progress, Some(parent_prep_draw_data)) {
                 vid.draw(img, prep_draw, render_settings);
             };
 
@@ -134,8 +134,8 @@ pub mod effects {
         todo!()
     } }
     impl EffectT for Rotate {
-        fn process_image(&mut self, progress: f64, vid: &mut crate::video::Video, img: &mut super::DynamicImage, render_settings: &mut VideoRenderSettings) {
-            if let Some(prep_draw) = vid.prep_draw(progress) {
+        fn process_image(&mut self, progress: f64, vid: &mut crate::video::Video, img: &mut super::DynamicImage, render_settings: &mut VideoRenderSettings, parent_prep_draw_data: &crate::video::PrepDrawData) {
+            if let Some(prep_draw) = vid.prep_draw(progress, Some(parent_prep_draw_data)) {
                 vid.draw(img, prep_draw, render_settings);
             };
             // Rotate the image by modifying the data in img
@@ -172,8 +172,8 @@ pub mod effects {
         Self { shake_dist_x, shake_dist_y, shakes_count_x, shakes_count_y, }
     } }
     impl EffectT for Shake {
-        fn process_image(&mut self, progress: f64, vid: &mut crate::video::Video, img: &mut super::DynamicImage, render_settings: &mut VideoRenderSettings) {
-            if let Some(mut prep_data) = vid.prep_draw(progress) {
+        fn process_image(&mut self, progress: f64, vid: &mut crate::video::Video, img: &mut super::DynamicImage, render_settings: &mut VideoRenderSettings, parent_prep_draw_data: &crate::video::PrepDrawData) {
+            if let Some(mut prep_data) = vid.prep_draw(progress, Some(parent_prep_draw_data)) {
     
                 if self.shakes_count_x > 0.0 {
                     prep_data.position.x += self.shake_dist_x * (2.0 * std::f64::consts::PI * progress * self.shakes_count_x).sin();
@@ -191,20 +191,20 @@ pub mod effects {
 
 
 
-    pub struct ChangeSpeed {
+    pub struct ChangeTime {
         pub time: Curve,
     }
-    impl ChangeSpeed { pub fn new(time: Curve) -> Self {
+    impl ChangeTime { pub fn new(time: Curve) -> Self {
         Self { time, }
     } }
-    impl EffectT for ChangeSpeed {
-        fn process_image(&mut self, progress: f64, vid: &mut crate::video::Video, img: &mut image::DynamicImage, render_settings: &mut VideoRenderSettings) {
-            if let Some(prep_data) = vid.prep_draw(self.time.get_value(progress)) {
+    impl EffectT for ChangeTime {
+        fn process_image(&mut self, progress: f64, vid: &mut crate::video::Video, img: &mut image::DynamicImage, render_settings: &mut VideoRenderSettings, parent_prep_draw_data: &crate::video::PrepDrawData) {
+            if let Some(prep_data) = vid.prep_draw(self.time.get_value(progress), Some(parent_prep_draw_data)) {
                 vid.draw(img, prep_data, render_settings);
             };
         }
         fn clone_no_caching(&self) -> super::Effect { super::Effect::new(Self::new(self.time.clone())) }
-        fn as_enum(self) -> EffectsEnum { EffectsEnum::ChangeSpeed(self) }
+        fn as_enum(self) -> EffectsEnum { EffectsEnum::ChangeTime(self) }
     }
 
 
@@ -216,8 +216,8 @@ pub mod effects {
         Self { mode, }
     } }
     impl EffectT for ColorAdjust {
-        fn process_image(&mut self, progress: f64, vid: &mut crate::video::Video, img: &mut super::DynamicImage, render_settings: &mut VideoRenderSettings) {
-            if let Some(prep_draw) = vid.prep_draw(progress) {
+        fn process_image(&mut self, progress: f64, vid: &mut crate::video::Video, img: &mut super::DynamicImage, render_settings: &mut VideoRenderSettings, parent_prep_draw_data: &crate::video::PrepDrawData) {
+            if let Some(prep_draw) = vid.prep_draw(progress, Some(parent_prep_draw_data)) {
                 vid.draw(img, prep_draw, render_settings);
             };
 
@@ -263,8 +263,8 @@ pub mod effects {
         Downscale { width: Curve, height: Curve, },
     }
     impl EffectT for Blur {
-        fn process_image(&mut self, progress: f64, vid: &mut crate::video::Video, img: &mut super::DynamicImage, render_settings: &mut VideoRenderSettings) {
-            if let Some(prep_data) = vid.prep_draw(progress) {
+        fn process_image(&mut self, progress: f64, vid: &mut crate::video::Video, img: &mut super::DynamicImage, render_settings: &mut VideoRenderSettings, parent_prep_draw_data: &crate::video::PrepDrawData) {
+            if let Some(prep_data) = vid.prep_draw(progress, Some(parent_prep_draw_data)) {
                 let mut img2 = super::DynamicImage::new_rgba8(img.width(), img.height());
                 vid.draw(&mut img2, prep_data, render_settings);
                 match &self.mode {
@@ -320,8 +320,8 @@ pub mod effects {
         Self { mode, }
     } }
     impl EffectT for ColorKey {
-        fn process_image(&mut self, progress: f64, vid: &mut crate::video::Video, img: &mut super::DynamicImage, render_settings: &mut VideoRenderSettings) {
-            if let Some(prep_draw) = vid.prep_draw(progress) {
+        fn process_image(&mut self, progress: f64, vid: &mut crate::video::Video, img: &mut super::DynamicImage, render_settings: &mut VideoRenderSettings, parent_prep_draw_data: &crate::video::PrepDrawData) {
+            if let Some(prep_draw) = vid.prep_draw(progress, Some(parent_prep_draw_data)) {
                 vid.draw(img, prep_draw, render_settings);
             };
 

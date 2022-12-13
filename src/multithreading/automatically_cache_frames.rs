@@ -62,10 +62,10 @@ impl VideoWithAutoCache {
                     if width != 0 && height != 0 {
                         if should_render {
                             should_render = false;
-                            let mut img = Box::new(image::DynamicImage::new_rgb8(width, height));
+                            let mut img = Box::new(image::DynamicImage::new_rgba8(width, height));
                             {
                                 let mut vid = vid.lock().unwrap();
-                                if let Some(prep_data) = vid.prep_draw(progress) {
+                                if let Some(prep_data) = vid.prep_draw(progress, None) {
                                     let aspect_ratio = width as f64 / height as f64;
                                     // println!("Aspect ratio: {}", aspect_ratio);
                                     vid.draw(img.as_mut(), prep_data, &mut crate::video_render_settings::VideoRenderSettings::preview(crate::video_render_settings::FrameRenderInfo::new(aspect_ratio)));

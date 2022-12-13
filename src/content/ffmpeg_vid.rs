@@ -120,11 +120,11 @@ impl FfmpegVid {
             None => None,
         }
     }
-    pub fn draw(&mut self, image: &mut DynamicImage, scaling_filter: FilterType) {
+    pub fn draw(&mut self, image: &mut DynamicImage, prep_draw: &crate::video::PrepDrawData, scaling_filter: FilterType) {
         let img = self.get_img_scaled(image.width(), image.height(), scaling_filter);
         if let Some(img) = img {
-            //for pixel in img.pixels() { let (x, y, mut pixel) = (pixel.0, pixel.1, pixel.2); image.put_pixel(x, y, pixel); };
             *image = img.clone();
+            crate::video::composite_images(image, &img, prep_draw);
         };
     }
 }

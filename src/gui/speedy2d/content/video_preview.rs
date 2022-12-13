@@ -128,13 +128,17 @@ impl VideoPreview {
         {
             let img = &self.video.shared.lock().unwrap().frame;
             if let Some(img) = img {
-                let handle = graphics.create_image_from_raw_pixels(ImageDataType::RGB, ImageSmoothingMode::NearestNeighbor, Vector2::new(img.width(), img.height()), img.as_bytes()).unwrap();
-                let x = position.0 + self.video_position.0 * position.2;
-                let y = position.1 + self.video_position.1 * position.3;
-                let w = self.video_position.2 * position.2;
-                let h = self.video_position.3 * position.3;
-                graphics.draw_rectangle_image_tinted(Rectangle::new(Vector2::new(x, y), Vector2::new(x + w, y + h)), Color::from_rgba(1.0, 1.0, 1.0, visibility), &handle);
-                    // 0.95
+                match graphics.create_image_from_raw_pixels(ImageDataType::RGBA, ImageSmoothingMode::NearestNeighbor, Vector2::new(img.width(), img.height()), img.as_bytes()) {
+                    Ok(handle) => {
+                        let x = position.0 + self.video_position.0 * position.2;
+                        let y = position.1 + self.video_position.1 * position.3;
+                        let w = self.video_position.2 * position.2;
+                        let h = self.video_position.3 * position.3;
+                        graphics.draw_rectangle_image_tinted(Rectangle::new(Vector2::new(x, y), Vector2::new(x + w, y + h)), Color::from_rgba(1.0, 1.0, 1.0, visibility), &handle);
+                            // 0.95
+                    },
+                    Err(e) => println!("COULDN'T DRAW IMAGE TO PREVIEW: create_image_from_raw_pixels failed (speedy2d/content/video_preview.rs: draw_type_normal()): {e}"),
+                }
             }
         }
 

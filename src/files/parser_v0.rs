@@ -1,6 +1,6 @@
 use std::{str::{Chars, FromStr}, path::PathBuf};
 
-use crate::{video::{Video, Pos, VideoType, VideoTypeEnum, TransparencyAdjustments}, project::{Project, ProjectData}, curve::Curve, effect::{effects, Effect}, multithreading::automatically_cache_frames::VideoWithAutoCache, content::input_video::InputVideo};
+use crate::{video::{Video, Pos, VideoType, VideoTypeEnum, CompositingMethod}, project::{Project, ProjectData}, curve::Curve, effect::{effects, Effect}, content::input_video::InputVideo};
 
 use super::parser_general::ParserError;
 
@@ -20,7 +20,7 @@ pub fn parse(str: &str, path: &PathBuf) -> Result<Project, ParserError> {
         };
         match identifier.as_str() {
             "proj" => match proj { None => proj = Some(parse_proj(&mut chars, path.clone())?), Some(_) => return Err(ParserError::DoubleDefinitionOf(identifier)), },
-            "vid" => match vid { None => vid = Some(Video::new_full(VideoType::new(VideoTypeEnum::List(parse_vid_vids(&mut chars)?)))), Some(_) => return Err(ParserError::DoubleDefinitionOf(identifier)), },
+            "vid" => match vid { None => vid = Some(parse_vid(&mut chars)?), Some(_) => return Err(ParserError::DoubleDefinitionOf(identifier)), },
             _ => return Err(ParserError::InvalidIdentifier(identifier)),
         };
     };
@@ -45,7 +45,7 @@ pub fn parse_vid(chars: &mut Chars) -> Result<Video, ParserError> {
     let mut start = None;
     let mut length = None;
     let mut video = None;
-    let mut transparency_adjustments = crate::video::TransparencyAdjustments::None;
+    let mut compositing = None;
     'before_return: loop {
         let mut identifier = String::new();
         loop {
@@ -73,25 +73,31 @@ pub fn parse_vid(chars: &mut Chars) -> Result<Video, ParserError> {
             "start" => start = Some(parse_vid_f64(chars)?),
             "length" => length = Some(parse_vid_f64(chars)?),
             "video" => video = Some(parse_vid_video(chars)?),
-            "transparency_adjustments" => transparency_adjustments = match chars.next() {
-                Some('=') => TransparencyAdjustments::Force(parse_vid_curve(chars)?),
-                Some('*') => TransparencyAdjustments::Factor(parse_vid_curve(chars)?),
-                Some('L') => TransparencyAdjustments::ForceOpaqueIfNotTransparent, // because plotting this would result in an upside-down L.
-                Some(ch) => return Err(ParserError::InvalidTransparencyAdjustmentIdentifier(ch)),
+            "compositing" => compositing = Some(match chars.next() {
+                Some('_') => CompositingMethod::Ignore,
+                Some('=') => CompositingMethod::Opaque,
+                Some('|') => CompositingMethod::Direct, // "Pipe"
+                Some('*') => CompositingMethod::TransparencySupport,
+                Some(ch) => return Err(ParserError::InvalidCompositingMode(ch)),
                 None => return Err(ParserError::UnexpectedEOF),
-            },
+            }),
             _ => return Err(ParserError::InvalidVideoInfoKey(identifier)),
         };
     };
-    match (pos, start, length, video) {
-        (Some(pos), Some(start_frame), Some(length), Some(video)) => Ok({
-            let mut vid = Video::new(pos, start_frame, length, video);
-            vid.transparency_adjustments = transparency_adjustments;
+    match (
+        match pos { None => { Pos { x: Curve::Constant(0.), y: Curve::Constant(0.), w: Curve::Constant(1.), h: Curve::Constant(1.), align: crate::video::PosAlign::TopLeft } }, Some(v) => v },
+        match start { None => 0.0, Some(v) => v },
+        match length { None => 1.0, Some(v) => v },
+        video
+    ) {
+        (/*Some(*/pos, /*Some(*/start, /*Some(*/length, Some(video)) => Ok({
+            let mut vid = Video::new(pos, start, length, video);
+            vid.compositing = compositing;
             vid
         }),
-        (None, _, _, _) => Err(ParserError::MissingVideoInfoKey(format!("pos"))),
-        (_, None, _, _) => Err(ParserError::MissingVideoInfoKey(format!("start"))),
-        (_, _, None, _) => Err(ParserError::MissingVideoInfoKey(format!("length"))),
+        // (None, _, _, _) => Err(ParserError::MissingVideoInfoKey(format!("pos"))),
+        // (_, None, _, _) => Err(ParserError::MissingVideoInfoKey(format!("start"))),
+        // (_, _, None, _) => Err(ParserError::MissingVideoInfoKey(format!("length"))),
         (_, _, _, None) => Err(ParserError::MissingVideoInfoKey(format!("video"))),
     }
 }
@@ -108,15 +114,19 @@ pub fn parse_vid_vids(chars: &mut Chars) -> Result<Vec<Video>, ParserError> {
     Ok(vec)
 }
 
+
 pub fn parse_vid_video(chars: &mut Chars) -> Result<VideoType, ParserError> {
-    let mut identifier = String::new();
-    loop {
-        match chars.next() {
-            Some(':') => break,
-            Some(' ' | '\t') => continue,
-            Some(ch) => identifier.push(ch),
-            None => return Err(ParserError::UnexpectedEOF),
-        };
+    let identifier = {
+        let mut i = String::new();
+        loop {
+            match chars.next() {
+                Some(':') => break,
+                Some(' ' | '\t') => continue,
+                Some(ch) => i.push(ch),
+                None => return Err(ParserError::UnexpectedEOF),
+            };
+        }
+        i
     };
     return Ok(VideoType::new(match identifier.as_str() {
         "List" => {
@@ -142,7 +152,7 @@ pub fn parse_vid_video(chars: &mut Chars) -> Result<VideoType, ParserError> {
                 "None" => Effect::new(effects::Nothing {}),
                 "BlackWhite" => Effect::new(effects::BlackWhite {}),
                 "Shake" => Effect::new(effects::Shake {shake_dist_x: parse_vid_f64(chars)?, shake_dist_y: parse_vid_f64(chars)?, shakes_count_x: parse_vid_f64(chars)?, shakes_count_y: parse_vid_f64(chars)?, }),
-                "ChangeSpeed" => Effect::new(effects::ChangeSpeed { time: parse_vid_curve(chars)?, }),
+                "ChangeTime" => Effect::new(effects::ChangeTime { time: parse_vid_curve(chars)?, }),
                 "Blur" => Effect::new(effects::Blur { mode: {
                     let mut identifier = String::new();
                     loop {

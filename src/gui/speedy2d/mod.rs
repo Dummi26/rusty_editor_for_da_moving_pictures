@@ -121,18 +121,16 @@ impl EditorWindowHandler {
                         proj
                     },
                     Ok(Err(err)) => {
-                        eprintln!("{}{}{}\n    {}\n{}",
+                        panic!("\n{}{}{}\n    {}\n",
                             Clz::error_info("Error parsing project file '"), Clz::error_cause(path.to_string_lossy().as_ref()), Clz::error_info("':"),
                             Clz::error_details(err.to_string().as_str()),
-                            Clz::progress("Continuing with a new (empty) project."),
                         );
                         project_gen_new_empty()
                     },
                     Err(err) => {
-                        eprintln!("{}{}{}\n    {}\n{}",
+                        panic!("\n{}{}{}\n    {}\n",
                             Clz::error_info("IO-Error loading project from file '"), Clz::error_cause(path.to_string_lossy().as_ref()), Clz::error_info("':"),
                             Clz::error_details(err.to_string().as_str()),
-                            Clz::progress("Continuing with a new (empty) project."),
                         );
                         project_gen_new_empty()
                     }

@@ -2,7 +2,7 @@ use std::{sync::{Arc, Mutex}, time::Instant};
 
 use speedy2d::{dimen::Vector2, color::Color, font::{TextLayout, TextOptions}};
 
-use crate::{video::{Video, VideoChanges}, content::content::Content, gui::speedy2d::{layout::{EditorWindowLayoutContentTrait, EditorWindowLayoutContentDrawMode, EditorWindowLayoutContentSDrawMode, EditorWindowLayoutContentData, CustomDrawActions}, content_list::{EditorWindowLayoutContent, EditorWindowLayoutContentEnum}, request::EditorWindowLayoutRequest}, effect, useful};
+use crate::{video::Video, content::content::Content, gui::speedy2d::{layout::{EditorWindowLayoutContentTrait, EditorWindowLayoutContentDrawMode, EditorWindowLayoutContentSDrawMode, EditorWindowLayoutContentData, CustomDrawActions}, content_list::{EditorWindowLayoutContent, EditorWindowLayoutContentEnum}, request::EditorWindowLayoutRequest}, effect, useful};
 
 pub struct VideoTree {
     /// This is always* the Some variant, so unwrapping it is safe.
@@ -212,7 +212,7 @@ impl VideoTree {
                     effect::effects::EffectsEnum::BlackWhite(_) => format!("BlackWhite"),
                     effect::effects::EffectsEnum::Rotate(_) => format!("Rotate: [?]"),
                     effect::effects::EffectsEnum::Shake(e) => format!("Shake ({}x{}, {}x{})", e.shake_dist_x, e.shakes_count_x, e.shake_dist_y, e.shakes_count_y),
-                    effect::effects::EffectsEnum::ChangeSpeed(_) => format!("ChangeSpeed"),
+                    effect::effects::EffectsEnum::ChangeTime(_) => format!("ChangeSpeed"),
                     effect::effects::EffectsEnum::ColorAdjust(e) => format!("ColorAdjust: {}", match &e.mode { effect::effects::ColorAdjust_Mode::Rgba(..) => "rgba", }),
                     effect::effects::EffectsEnum::Blur(e) => format!("Blur: {}", match &e.mode { effect::effects::Blur_Mode::Square {..} => "Square", effect::effects::Blur_Mode::Downscale {..} => "Downscale", }),
                     effect::effects::EffectsEnum::ColorKey(_) => format!("ColorKey"),

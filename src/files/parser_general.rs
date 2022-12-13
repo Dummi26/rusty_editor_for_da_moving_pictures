@@ -26,7 +26,7 @@ pub enum ParserError {
     DirectoryWithImagesNotFound(PathBuf, io::Error),
     
     /// Only =, *, and L are allowed. For None, do not include this option in the save file at all (None is the default value).
-    InvalidTransparencyAdjustmentIdentifier(char),
+    InvalidCompositingMode(char),
     
     /// Attempted to parse a curve, but found an unexpected character.
     InvalidCurveIdentifier(char),
@@ -56,14 +56,14 @@ impl Display for ParserError {
             Self::DoubleDefinitionOf(i) => format!("Identifier '{i}' was defined twice!"),
             Self::MissingIdentifier(i) => format!("Identifier '{i}' was never defined, but is required!"),
             Self::InvalidVideoType(t) => format!("Video type '{t}' does not exist! Try List, WithEffect, Image, or VidFromImagesInDirectory"),
-            Self::InvalidVideoInfoKey(k) => format!("VideoInfoKey '{k}' not permitted! Try pos, start, length, video or transparency_adjustments."),
+            Self::InvalidVideoInfoKey(k) => format!("VideoInfoKey '{k}' not permitted! Try pos, start, length, video or compositing."),
             Self::MissingVideoInfoKey(k) => format!("VideoInfoKey '{k}' was missing but is required! Consider adding it."),
             Self::DirectoryWithImagesNotFound(d, e) => format!("Directory with images was not found. Dir: \"{}\", Err: \"{e}\"", d.display()),
-            Self::InvalidTransparencyAdjustmentIdentifier(i) => format!("Invalid transparency adjustment identifier '{i}'. Only = (force), * (factor), and L (fully opaque unless fully transparent) are allowed. (= and * must be followed by Curves.)"),
+            Self::InvalidCompositingMode(i) => format!("Invalid compositing method identifier '{i}'. Only _ (ignore), = (opaque), | (direct) and * (supports transparency) are allowed."),
             Self::InvalidCurveIdentifier(c) => format!("Found unexpected character '{c}' when parsing Curve. Allowed are only 0-9, '.', '/', 's', and '#'."),
             Self::InvalidTextType(c) => format!("Found unexpected text type character '{c}'. Use 's' for static text."),
             Self::VideoFileFailedToParseStartOrEndFrame(t) => format!("Failed to parse a video's start and end frames (crop): {t}"),
-            Self::UnknownEffect(e) => format!("Effect '{e}' does not exist! Try None (placeholder), BlackWhite, Shake, ChangeSpeed, Blur, ColorAdjust or ColorKey."),
+            Self::UnknownEffect(e) => format!("Effect '{e}' does not exist! Try None (placeholder), BlackWhite, Shake, ChangeTime, Blur, ColorAdjust or ColorKey."),
             Self::EffectParseError { effect_identifier, custom_error } => format!("Failed to parse effect '{effect_identifier}', Err: \"{custom_error}\""),
             Self::ParseIntError(i, e) => format!("Failed to parse '{i}' into an int. Err: {e}"),
             Self::ParseFloatError(i, e) => format!("Failed to parse '{i}' into a float. Err: {e}"),
