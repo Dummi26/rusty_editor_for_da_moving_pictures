@@ -43,7 +43,11 @@ impl EditorWindowLayoutContentTrait for Placeholder {
         };
     }
 
-    fn handle_input_custom(&mut self, _draw_opts: &mut crate::gui::speedy2d::layout::EditorWindowLayoutContentDrawOptions, input: &mut crate::gui::speedy2d::layout::UserInput) {
+    fn handle_input_custom(&mut self, draw_opts: &mut crate::gui::speedy2d::layout::EditorWindowLayoutContentDrawOptions, input: &mut crate::gui::speedy2d::layout::UserInput) {
+        match draw_opts.draw_mode {
+            crate::gui::speedy2d::layout::EditorWindowLayoutContentDrawMode::Static(crate::gui::speedy2d::layout::EditorWindowLayoutContentSDrawMode::TypePreview { .. }) => (),
+            _ => return,
+        }
         let mouse_currently_on = if input.clonable.mouse_pos.0 > 0.0 && input.clonable.mouse_pos.0 < 1.0 && input.clonable.mouse_pos.1 > 0.0 && input.clonable.mouse_pos.1 < 1.0 {
             Some((input.clonable.mouse_pos.1 * Self::TYPES_WHICH_CAN_REPLACE_COUNT as f32).floor() as usize)
         } else { None };
