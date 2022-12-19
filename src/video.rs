@@ -489,7 +489,7 @@ impl Drawable for VideoTypeEnum {
 
 
 
-/// Draws the image onto the other one, following the compositing method and position provided by prep_draw.
+/// Draws the image onto the other one, following the compositing method and position provided by prep_draw. ASSUMES THE IMAGE HAS THE CORRECT SIZE!
 pub fn composite_images(image: &mut DynamicImage, img: &DynamicImage, prep_draw: &PrepDrawData) {
     let pos = (prep_draw.pos_px.0.ceil() as i32, prep_draw.pos_px.1.ceil() as i32, prep_draw.pos_px.2 as u32, prep_draw.pos_px.3 as u32);
     match &prep_draw.compositing {

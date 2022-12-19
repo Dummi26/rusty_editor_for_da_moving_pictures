@@ -121,9 +121,8 @@ impl FfmpegVid {
         }
     }
     pub fn draw(&mut self, image: &mut DynamicImage, prep_draw: &crate::video::PrepDrawData, scaling_filter: FilterType) {
-        let img = self.get_img_scaled(image.width(), image.height(), scaling_filter);
+        let img = self.get_img_scaled(prep_draw.pos_px.2 as _, prep_draw.pos_px.3 as _, scaling_filter);
         if let Some(img) = img {
-            *image = img.clone();
             crate::video::composite_images(image, &img, prep_draw);
         };
     }
