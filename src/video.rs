@@ -1,6 +1,6 @@
 use image::{DynamicImage, GenericImage, GenericImageView};
 
-use crate::{curve::Curve, video_render_settings::VideoRenderSettings, content::{content::Content, image::ImageChanges, input_video::InputVideoChanges}, cli::Clz};
+use crate::{curve::{Curve, CurveData}, video_render_settings::VideoRenderSettings, content::{content::Content, image::ImageChanges, input_video::InputVideoChanges}, cli::Clz};
 
 pub struct Video {
     // - - The video's data (what is to be saved to the project file) - -
@@ -162,9 +162,9 @@ impl Content for Video {
                     // from/to list
                     (VideoTypeEnum::List(mut v), VideoChangesReplaceWith::AspectRatio) => {
                         if v.is_empty() {
-                            VideoTypeEnum::AspectRatio(Box::new(Video::new_full(VideoType::new(VideoTypeEnum::List(vec![])))), Curve::Constant(1.0), Curve::Constant(1.0))
+                            VideoTypeEnum::AspectRatio(Box::new(Video::new_full(VideoType::new(VideoTypeEnum::List(vec![])))), CurveData::Constant(1.0).into(), CurveData::Constant(1.0).into())
                         } else { // put the first element of the list into the aspect ratio (use WRAP instead to preserve all elements)
-                            VideoTypeEnum::AspectRatio(Box::new(v.swap_remove(0)), Curve::Constant(1.0), Curve::Constant(1.0))
+                            VideoTypeEnum::AspectRatio(Box::new(v.swap_remove(0)), CurveData::Constant(1.0).into(), CurveData::Constant(1.0).into())
                         }
                     },
                     (VideoTypeEnum::List(mut v), VideoChangesReplaceWith::WithEffect) => {
@@ -176,7 +176,7 @@ impl Content for Video {
                     (VideoTypeEnum::AspectRatio(v, _, _) | VideoTypeEnum::WithEffect(v, _), VideoChangesReplaceWith::List) => VideoTypeEnum::List(vec![*v]),
                     // both things have one child
                     (VideoTypeEnum::AspectRatio(v, _, _), VideoChangesReplaceWith::WithEffect) => VideoTypeEnum::WithEffect(v, crate::effect::Effect::new_from_enum(crate::effect::effects::EffectsEnum::Nothing(crate::effect::effects::Nothing::new()))),
-                    (VideoTypeEnum::WithEffect(v, _), VideoChangesReplaceWith::AspectRatio) => VideoTypeEnum::AspectRatio(v, Curve::Constant(1.0), Curve::Constant(1.0)),
+                    (VideoTypeEnum::WithEffect(v, _), VideoChangesReplaceWith::AspectRatio) => VideoTypeEnum::AspectRatio(v, CurveData::Constant(1.0).into(), CurveData::Constant(1.0).into()),
                     // all the things with a path
                     (VideoTypeEnum::Image(v), VideoChangesReplaceWith::Ffmpeg) => VideoTypeEnum::Ffmpeg(crate::content::ffmpeg_vid::FfmpegVid::new(v.path().clone())),
                     (VideoTypeEnum::Raw(v), VideoChangesReplaceWith::Image) => VideoTypeEnum::Image(crate::content::image::Image::new(v.get_dir().clone())),
@@ -193,7 +193,7 @@ impl Content for Video {
                         };
                         match into {
                             VideoChangesReplaceWith::List => VideoTypeEnum::List(vec![]),
-                            VideoChangesReplaceWith::AspectRatio => VideoTypeEnum::AspectRatio(Box::new(Video::new_full(VideoType::new(VideoTypeEnum::List(vec![])))), Curve::Constant(1.0), Curve::Constant(1.0)),
+                            VideoChangesReplaceWith::AspectRatio => VideoTypeEnum::AspectRatio(Box::new(Video::new_full(VideoType::new(VideoTypeEnum::List(vec![])))), CurveData::Constant(1.0).into(), CurveData::Constant(1.0).into()),
                             VideoChangesReplaceWith::WithEffect => VideoTypeEnum::WithEffect(Box::new(Video::new_full(VideoType::new(VideoTypeEnum::List(vec![])))), crate::effect::Effect::new_from_enum(crate::effect::effects::EffectsEnum::Nothing(crate::effect::effects::Nothing::new()))),
                             VideoChangesReplaceWith::Text => unreachable!(),
                             VideoChangesReplaceWith::Image => VideoTypeEnum::Image(crate::content::image::Image::new(text.into())),
@@ -203,7 +203,7 @@ impl Content for Video {
                     },
                     // don't use any information of the old one
                     (_, VideoChangesReplaceWith::List) => VideoTypeEnum::List(vec![]),
-                    (_, VideoChangesReplaceWith::AspectRatio) => VideoTypeEnum::AspectRatio(Box::new(Video::new_full(VideoType::new(VideoTypeEnum::List(vec![])))), Curve::Constant(1.0), Curve::Constant(1.0)),
+                    (_, VideoChangesReplaceWith::AspectRatio) => VideoTypeEnum::AspectRatio(Box::new(Video::new_full(VideoType::new(VideoTypeEnum::List(vec![])))), CurveData::Constant(1.0).into(), CurveData::Constant(1.0).into()),
                     (_, VideoChangesReplaceWith::WithEffect) => VideoTypeEnum::WithEffect(Box::new(Video::new_full(VideoType::new(VideoTypeEnum::List(vec![])))), crate::effect::Effect::new_from_enum(crate::effect::effects::EffectsEnum::Nothing(crate::effect::effects::Nothing::new()))),
                     (_, VideoChangesReplaceWith::Text) => VideoTypeEnum::Text(crate::content::text::Text::new(crate::content::text::TextType::Static("[some text]".to_string()))),
                     (_, VideoChangesReplaceWith::Image) => VideoTypeEnum::Image(crate::content::image::Image::new("[image]".into())),
@@ -222,7 +222,7 @@ impl Content for Video {
 impl Video {
     pub fn new_full(video: VideoType) -> Self {
         Self {
-            set_pos: Pos { align: PosAlign::Center, x: Curve::Constant(0.5), y: Curve::Constant(0.5), w: Curve::Constant(1.0), h: Curve::Constant(1.0) },
+            set_pos: Pos { align: PosAlign::Center, x: CurveData::Constant(0.5).into(), y: CurveData::Constant(0.5).into(), w: CurveData::Constant(1.0).into(), h: CurveData::Constant(1.0).into() },
             set_start_frame: 0.0,
             set_length: 1.0,
             video,
@@ -233,7 +233,7 @@ impl Video {
     }
     pub fn new_full_size(start_frame: f64, length: f64, video: VideoType) -> Self {
         Self {
-            set_pos: Pos { align: PosAlign::Center, x: Curve::Constant(0.5), y: Curve::Constant(0.5), w: Curve::Constant(1.0), h: Curve::Constant(1.0) },
+            set_pos: Pos { align: PosAlign::Center, x: CurveData::Constant(0.5).into(), y: CurveData::Constant(0.5).into(), w: CurveData::Constant(1.0).into(), h: CurveData::Constant(1.0).into() },
             set_start_frame: start_frame,
             set_length: length,
             video,

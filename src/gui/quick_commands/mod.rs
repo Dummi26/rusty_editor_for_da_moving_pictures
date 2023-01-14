@@ -101,7 +101,7 @@ impl QuickCommandsHandler {
                         let mut nums = rest.split(':');
                         if let (Some(n1), Some(n2)) = (nums.next(), nums.next()) {
                             match (n1.parse::<f64>(), n2.parse::<f64>()) {
-                                (Ok(n1), Ok(n2)) => return Ok(vec![QctCommand::ApplyChanges(crate::video::VideoChanges { wrap: Some(crate::video::VideoChangesWrapWith::AspectRatio(crate::curve::Curve::Constant(n1), crate::curve::Curve::Constant(n2))), ..Default::default() })]),
+                                (Ok(n1), Ok(n2)) => return Ok(vec![QctCommand::ApplyChanges(crate::video::VideoChanges { wrap: Some(crate::video::VideoChangesWrapWith::AspectRatio(crate::curve::CurveData::Constant(n1).into(), crate::curve::CurveData::Constant(n2).into())), ..Default::default() })]),
                                 (Ok(_), Err(e2)) => return Err(format!("width '{}' could not be parsed: {}", n2, e2)),
                                 (Err(e1), Ok(_)) => return Err(format!("height '{}' could not be parsed: {}", n1, e1)),
                                 (Err(e1), Err(e2)) => return Err(format!("width '{}' and height '{}' could not be parsed: {} | {}", n1, n2, e1, e2)),

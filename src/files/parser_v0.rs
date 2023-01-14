@@ -1,6 +1,6 @@
 use std::{str::{Chars, FromStr}, path::PathBuf};
 
-use crate::{video::{Video, Pos, VideoType, VideoTypeEnum, CompositingMethod}, project::{Project, ProjectData}, curve::Curve, effect::{effects, Effect}, content::input_video::InputVideo};
+use crate::{video::{Video, Pos, VideoType, VideoTypeEnum, CompositingMethod}, project::{Project, ProjectData}, curve::{Curve, CurveData}, effect::{effects, Effect}, content::input_video::InputVideo};
 
 use super::parser_general::ParserError;
 
@@ -85,7 +85,7 @@ pub fn parse_vid(chars: &mut Chars) -> Result<Video, ParserError> {
         };
     };
     match (
-        match pos { None => { Pos { x: Curve::Constant(0.), y: Curve::Constant(0.), w: Curve::Constant(1.), h: Curve::Constant(1.), align: crate::video::PosAlign::TopLeft } }, Some(v) => v },
+        match pos { None => { Pos { x: CurveData::Constant(0.).into(), y: CurveData::Constant(0.).into(), w: CurveData::Constant(1.).into(), h: CurveData::Constant(1.).into(), align: crate::video::PosAlign::TopLeft } }, Some(v) => v },
         match start { None => 0.0, Some(v) => v },
         match length { None => 1.0, Some(v) => v },
         video
@@ -278,10 +278,10 @@ pub fn parse_vid_curve(chars: &mut Chars) -> Result<Curve, ParserError> {
     Ok(loop { break match chars.next() {
         Some(char) => match char {
             ' ' | '\t' => continue,
-            '-' | '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | '.' => Curve::Constant(parse_vid_f64_prepend(String::from(char), chars)?),
-            '/' => Curve::Linear(parse_vid_curve(chars)?.b(), parse_vid_curve(chars)?.b()),
-            's' => Curve::SmoothFlat(parse_vid_curve(chars)?.b(), parse_vid_curve(chars)?.b()),
-            '#' => Curve::Chain(
+            '-' | '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | '.' => CurveData::Constant(parse_vid_f64_prepend(String::from(char), chars)?),
+            '/' => CurveData::Linear(parse_vid_curve(chars)?, parse_vid_curve(chars)?),
+            's' => CurveData::SmoothFlat(parse_vid_curve(chars)?, parse_vid_curve(chars)?),
+            '#' => CurveData::Chain(
                 {
                     let mut vec = Vec::new();
                     loop {
@@ -297,11 +297,11 @@ pub fn parse_vid_curve(chars: &mut Chars) -> Result<Curve, ParserError> {
                     vec
                 }
             ),
-            '!' => Curve::Program(crate::external_program::ExternalProgram::new(parse_path(chars)?, crate::external_program::ExternalProgramMode::RunOnceArg), crate::curve::CurveExternalProgramMode::String), // TODO: Make this more flexible
+            '!' => CurveData::Program(crate::external_program::ExternalProgram::new(parse_path(chars)?, crate::external_program::ExternalProgramMode::RunOnceArg), crate::curve::CurveExternalProgramMode::String), // TODO: Make this more flexible
             _ => return Err(ParserError::InvalidCurveIdentifier(char)),
         },
         None => return Err(ParserError::UnexpectedEOF),
-    }; })
+    }; }.into())
 }
 
 /// Parses an integer in the form "(int);"

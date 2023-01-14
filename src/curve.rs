@@ -1,47 +1,69 @@
+use std::sync::{Arc, Mutex, MutexGuard};
+
+// NOTE: Cloning might seem a little weird because Shared and Owned types might be mixed.
+
+#[derive(Clone)]
 pub enum Curve {
+    Owned(Box<CurveData>),
+    Shared(Arc<Mutex<CurveData>>),
+}
+impl Curve {
+    pub fn is_owned(&self) -> bool {
+        if let Self::Owned(_) = self {
+            true
+        } else {
+            false
+        }
+    }
+    /// For a range from 0 to 1, returns a value (mostly also from 0 to 1, but could exceed the two bounds).
+    pub fn get_value(&self, progress: f64) -> f64 {
+        match self {
+            Self::Owned(v) => v.get_value(progress),
+            Self::Shared(v) => v.lock().unwrap().get_value(progress),
+        }
+    }
+}
+
+impl From<CurveData> for Curve {
+    fn from(value: CurveData) -> Self {
+        Self::Owned(Box::new(value))
+    }
+}
+
+pub enum CurveData {
     /// Always has the same value.
     Constant(f64),
     /// linearly go from a to b
-    Linear(BCurve, BCurve),
+    Linear(Curve, Curve),
     /// Smoothly go from one point to another, where f(0.0) = self.0, f(1.0) = self.1, and f'(0.0) = f'(1.0) = 0.0 (flattened out at both ends)
-    SmoothFlat(BCurve, BCurve),
+    SmoothFlat(Curve, Curve),
     /// Chains multiple Curves together. Obviously, the curve's values should be the same at the points where they meet, but this is not strictly necessary. The f64 values in the tuple are the length for the corresponding curve. If their sum is less than 1, the end will use the value the final curve returned for 1.
     Chain(Vec<(Curve, f64)>),
     Program(crate::external_program::ExternalProgram, CurveExternalProgramMode),
     // ProgramPersistent((), ), // TODO!
 }
-impl Clone for Curve { fn clone(&self) -> Self { match self {
-    Curve::Constant(a) => Curve::Constant(a.clone()),
-    Curve::Linear(a, b) => Curve::Linear(a.clone(), b.clone()),
-    Curve::SmoothFlat(a, b) => Curve::SmoothFlat(a.r().clone().b(), b.r().clone().b()),
-    Curve::Chain(a) => Curve::Chain({
+impl Clone for CurveData { fn clone(&self) -> Self { match self {
+    Self::Constant(a) => Self::Constant(a.clone()),
+    Self::Linear(a, b) => Self::Linear(a.clone(), b.clone()),
+    Self::SmoothFlat(a, b) => Self::SmoothFlat(a.clone(), b.clone()),
+    Self::Chain(a) => Self::Chain({
         let mut nvec = Vec::with_capacity(a.len());
         for b in a {
             nvec.push((b.0.clone(), b.1.clone()));
         };
         nvec
     }),
-    Curve::Program(p, m) => Curve::Program(p.clone(), *m),
+    Self::Program(p, m) => Self::Program(p.clone(), *m),
 } } }
 
-pub struct BCurve {
-    pub c: Box<Curve>,
-} impl BCurve {
-    pub fn n(c: Curve) -> Self { Self { c: Box::new(c), } }
-    pub fn c(self) -> Curve { *self.c }
-    pub fn r(&self) -> &Curve { self.c.as_ref() }
-} impl Clone for BCurve {
-    fn clone(&self) -> Self { self.c.clone().b() }
-}
-impl Curve {
-    pub fn b(self) -> BCurve { BCurve::n(self) }
+impl CurveData {
     /// For a range from 0 to 1, returns a value (mostly also from 0 to 1, but could exceed the two bounds).
     pub fn get_value(&self, progress: f64) -> f64 {
         match self {
             Self::Constant(v) => *v,
             Self::Linear(start, end) => {
-                let start = start.c.get_value(progress);
-                let dif = end.c.get_value(progress) - start;
+                let start = start.get_value(progress);
+                let dif = end.get_value(progress) - start;
                 start + dif * progress
             },
             Self::Chain(chain) => 'get_from_chain: {
@@ -56,8 +78,8 @@ impl Curve {
                 match chain.last() { Some(last) => last.0.get_value(1.0), None => 1.0 }
             },
             Self::SmoothFlat(x1, x2) => {
-                let x1 = x1.c.get_value(progress);
-                let x2 = x2.c.get_value(progress);
+                let x1 = x1.get_value(progress);
+                let x2 = x2.get_value(progress);
                 let factor = -2.0 * progress * progress * progress + 3.0 * progress * progress;
                 x1 + (x2 - x1) * factor
             },

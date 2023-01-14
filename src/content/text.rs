@@ -63,7 +63,7 @@ impl Content for Text {
 }
 impl Text {
     pub fn new(text: TextType) -> Self {
-        Self { text, font: None, color: crate::types::Color::RGBA(crate::curve::Curve::Constant(1.0), crate::curve::Curve::Constant(1.0), crate::curve::Curve::Constant(1.0), crate::curve::Curve::Constant(1.0)), as_content_changes: TextChanges::default(), generic_content_data: crate::content::content::GenericContentData::default(), }
+        Self { text, font: None, color: crate::types::Color::RGBA(crate::curve::CurveData::Constant(1.0).into(), crate::curve::CurveData::Constant(1.0).into(), crate::curve::CurveData::Constant(1.0).into(), crate::curve::CurveData::Constant(1.0).into()), as_content_changes: TextChanges::default(), generic_content_data: crate::content::content::GenericContentData::default(), }
     }
 }
 impl Text {
