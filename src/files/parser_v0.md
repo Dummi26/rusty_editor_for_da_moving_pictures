@@ -24,3 +24,13 @@ default: \[path]\\0+0; (don't cut off any frames on either side)
 \[path]\\
 
 This is very slow and does not cache the video. It uses ffprobe to get the video's length, then ffmpeg to get a frame from the video, write that to /tmp/..., read that and then display the frame.
+
+# Image
+
+[image path];
+
+[image path]<[command];
+
+[image path]<[command]+[arg];
+
+[image path]<[command]+[arg1]+[arg2]+[arg..];
