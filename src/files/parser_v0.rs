@@ -1,10 +1,11 @@
 use std::{
     path::PathBuf,
     str::{Chars, FromStr},
+    sync::{Arc, Mutex},
 };
 
 use crate::{
-    content::input_video::InputVideo,
+    content::{content::GenericContentData, input_video::InputVideo},
     curve::{Curve, CurveData},
     effect::{effects, Effect},
     project::{Project, ProjectData},
@@ -35,11 +36,18 @@ pub fn parse(str: &str, path: &PathBuf) -> Result<Project, ParserError> {
         }
         match identifier.as_str() {
             "proj" => match proj {
-                None => proj = Some(parse_proj(&mut chars, path.clone())?),
+                None => proj = Some(Project::new(parse_proj(&mut chars, path.clone())?)),
                 Some(_) => return Err(ParserError::DoubleDefinitionOf(identifier)),
             },
             "vid" => match vid {
-                None => vid = Some(parse_vid(&mut chars)?),
+                None => {
+                    vid = Some(parse_vid(
+                        &mut chars,
+                        GenericContentData::new(
+                            proj.clone().expect("Project must be defined before vid!"),
+                        ),
+                    )?)
+                }
                 Some(_) => return Err(ParserError::DoubleDefinitionOf(identifier)),
             },
             _ => return Err(ParserError::InvalidIdentifier(identifier)),
@@ -47,10 +55,10 @@ pub fn parse(str: &str, path: &PathBuf) -> Result<Project, ParserError> {
     }
     // return
     match (proj, vid) {
-        (Some(proj), Some(vid)) => Ok(Project {
-            proj: std::sync::Arc::new(std::sync::Mutex::new(proj)),
-            vid: std::sync::Arc::new(std::sync::Mutex::new(vid)),
-        }),
+        (Some(mut proj), Some(vid)) => {
+            proj.add_vid(Arc::new(Mutex::new(vid)));
+            Ok(proj)
+        }
         (None, _) => Err(ParserError::MissingIdentifier(format!("proj"))),
         (_, None) => Err(ParserError::MissingIdentifier(format!("vid"))),
     }
@@ -66,7 +74,10 @@ pub fn parse_proj(chars: &mut Chars, path: PathBuf) -> Result<ProjectData, Parse
     })
 }
 
-pub fn parse_vid(chars: &mut Chars) -> Result<Video, ParserError> {
+pub fn parse_vid(
+    chars: &mut Chars,
+    generic_content_data: GenericContentData,
+) -> Result<Video, ParserError> {
     let mut pos = None;
     let mut start = None;
     let mut length = None;
@@ -113,7 +124,7 @@ pub fn parse_vid(chars: &mut Chars) -> Result<Video, ParserError> {
             }
             "start" => start = Some(parse_vid_f64(chars)?),
             "length" => length = Some(parse_vid_f64(chars)?),
-            "video" => video = Some(parse_vid_video(chars)?),
+            "video" => video = Some(parse_vid_video(chars, generic_content_data.reset())?),
             "compositing" => {
                 compositing = Some(match chars.next() {
                     Some('_') => CompositingMethod::Ignore,
@@ -160,11 +171,14 @@ pub fn parse_vid(chars: &mut Chars) -> Result<Video, ParserError> {
     }
 }
 
-pub fn parse_vid_vids(chars: &mut Chars) -> Result<Vec<Video>, ParserError> {
+pub fn parse_vid_vids(
+    chars: &mut Chars,
+    generic_content_data: &GenericContentData,
+) -> Result<Vec<Video>, ParserError> {
     let mut vec = Vec::new();
     loop {
         match chars.next() {
-            Some('+') => vec.push(parse_vid(chars)?),
+            Some('+') => vec.push(parse_vid(chars, generic_content_data.reset())?),
             Some(_ /* preferrably ; for clarity. */) => break,
             None => return Err(ParserError::UnexpectedEOF),
         };
@@ -172,7 +186,10 @@ pub fn parse_vid_vids(chars: &mut Chars) -> Result<Vec<Video>, ParserError> {
     Ok(vec)
 }
 
-pub fn parse_vid_video(chars: &mut Chars) -> Result<VideoType, ParserError> {
+pub fn parse_vid_video(
+    chars: &mut Chars,
+    generic_content_data: GenericContentData,
+) -> Result<VideoType, ParserError> {
     let identifier = {
         let mut i = String::new();
         loop {
@@ -185,208 +202,226 @@ pub fn parse_vid_video(chars: &mut Chars) -> Result<VideoType, ParserError> {
         }
         i
     };
-    return Ok(VideoType::new(match identifier.as_str() {
-        "List" => VideoTypeEnum::List(parse_vid_vids(chars)?),
-        "AspectRatio" => {
-            let (w, h) = (parse_vid_curve(chars)?, parse_vid_curve(chars)?);
-            VideoTypeEnum::AspectRatio(Box::new(parse_vid(chars)?), w, h)
-        }
-        "WithEffect" => {
-            let video_data = parse_vid(chars)?;
-            let effect_name = {
-                let mut name = String::new();
-                loop {
-                    match chars.next() {
-                        Some(':') => break name,
-                        Some(ch) => name.push(ch),
-                        None => return Err(ParserError::UnexpectedEOF),
-                    };
-                }
-            };
-            VideoTypeEnum::WithEffect(
-                Box::new(video_data),
-                match effect_name.as_str() {
-                    "None" => Effect::new(effects::Nothing {}),
-                    "BlackWhite" => Effect::new(effects::BlackWhite {}),
-                    "Shake" => Effect::new(effects::Shake {
-                        shake_dist_x: parse_vid_f64(chars)?,
-                        shake_dist_y: parse_vid_f64(chars)?,
-                        shakes_count_x: parse_vid_f64(chars)?,
-                        shakes_count_y: parse_vid_f64(chars)?,
-                    }),
-                    "ChangeTime" => Effect::new(effects::ChangeTime {
-                        time: parse_vid_curve(chars)?,
-                    }),
-                    "Blur" => Effect::new(effects::Blur {
-                        mode: {
-                            let mut identifier = String::new();
-                            loop {
-                                match chars.next() {
-                                    Some(':') => break,
-                                    Some(ch) => identifier.push(ch),
-                                    None => return Err(ParserError::UnexpectedEOF),
-                                };
-                            }
-                            match identifier.as_str() {
+    return Ok(VideoType::new(
+        match identifier.as_str() {
+            "List" => VideoTypeEnum::List(parse_vid_vids(chars, &generic_content_data)?),
+            "AspectRatio" => {
+                let (w, h) = (parse_vid_curve(chars)?, parse_vid_curve(chars)?);
+                VideoTypeEnum::AspectRatio(
+                    Box::new(parse_vid(chars, generic_content_data.reset())?),
+                    w,
+                    h,
+                )
+            }
+            "WithEffect" => {
+                let video_data = parse_vid(chars, generic_content_data.reset())?;
+                let effect_name = {
+                    let mut name = String::new();
+                    loop {
+                        match chars.next() {
+                            Some(':') => break name,
+                            Some(ch) => name.push(ch),
+                            None => return Err(ParserError::UnexpectedEOF),
+                        };
+                    }
+                };
+                VideoTypeEnum::WithEffect(
+                    Box::new(video_data),
+                    match effect_name.as_str() {
+                        "None" => Effect::new(effects::Nothing {}),
+                        "BlackWhite" => Effect::new(effects::BlackWhite {}),
+                        "Shake" => Effect::new(effects::Shake {
+                            shake_dist_x: parse_vid_f64(chars)?,
+                            shake_dist_y: parse_vid_f64(chars)?,
+                            shakes_count_x: parse_vid_f64(chars)?,
+                            shakes_count_y: parse_vid_f64(chars)?,
+                        }),
+                        "ChangeTime" => Effect::new(effects::ChangeTime {
+                            time: parse_vid_curve(chars)?,
+                        }),
+                        "Blur" => Effect::new(effects::Blur {
+                            mode: {
+                                let mut identifier = String::new();
+                                loop {
+                                    match chars.next() {
+                                        Some(':') => break,
+                                        Some(ch) => identifier.push(ch),
+                                        None => return Err(ParserError::UnexpectedEOF),
+                                    };
+                                }
+                                match identifier.as_str() {
                         "Square" => effects::Blur_Mode::Square { radius: parse_vid_curve(chars)?, },
                         "Downscale" => effects::Blur_Mode::Downscale { width: parse_vid_curve(chars)?, height: parse_vid_curve(chars)?, },
                         _ => return Err(ParserError::EffectParseError { effect_identifier: effect_name, custom_error: format!("Blur mode '{identifier}' does not exist! Try Square (Curve) or Downscale (Curve + Curve)"), }),
                     }
-                        },
-                    }),
-                    "ColorAdjust" => Effect::new(effects::ColorAdjust {
-                        mode: {
-                            let mut identifier = String::new();
-                            loop {
-                                match chars.next() {
-                                    Some(':') => break,
-                                    Some(ch) => identifier.push(ch),
-                                    None => return Err(ParserError::UnexpectedEOF),
-                                };
-                            }
-                            match identifier.as_str() {
+                            },
+                        }),
+                        "ColorAdjust" => Effect::new(effects::ColorAdjust {
+                            mode: {
+                                let mut identifier = String::new();
+                                loop {
+                                    match chars.next() {
+                                        Some(':') => break,
+                                        Some(ch) => identifier.push(ch),
+                                        None => return Err(ParserError::UnexpectedEOF),
+                                    };
+                                }
+                                match identifier.as_str() {
                         "rgba" => effects::ColorAdjust_Mode::Rgba(parse_vid_curve(chars)?, parse_vid_curve(chars)?, parse_vid_curve(chars)?, parse_vid_curve(chars)?),
                         _ => return Err(ParserError::EffectParseError { effect_identifier: effect_name, custom_error: format!("'{}' is not a valid ColorAdjustMode. Try rgba:RGBA where R,G,B,A are Curve.", identifier), })
                     }
-                        },
-                    }),
-                    "ColorKey" => Effect::new(effects::ColorKey {
-                        mode: {
-                            let mut identifier = String::new();
-                            loop {
-                                match chars.next() {
-                                    Some(':') => break,
-                                    Some(ch) => identifier.push(ch),
-                                    None => return Err(ParserError::UnexpectedEOF),
-                                };
-                            }
-                            match identifier.as_str() {
+                            },
+                        }),
+                        "ColorKey" => Effect::new(effects::ColorKey {
+                            mode: {
+                                let mut identifier = String::new();
+                                loop {
+                                    match chars.next() {
+                                        Some(':') => break,
+                                        Some(ch) => identifier.push(ch),
+                                        None => return Err(ParserError::UnexpectedEOF),
+                                    };
+                                }
+                                match identifier.as_str() {
                         "rgb_eq" => effects::ColorKey_Mode::TransparentIfMatches((parse_vid_int(chars)?, parse_vid_int(chars)?, parse_vid_int(chars)?)),
                         "rgb_rng" => effects::ColorKey_Mode::TransparentIfRange(((parse_vid_int(chars)?, parse_vid_int(chars)?), (parse_vid_int(chars)?, parse_vid_int(chars)?), (parse_vid_int(chars)?, parse_vid_int(chars)?))),
                         _ => return Err(ParserError::EffectParseError { effect_identifier: effect_name, custom_error: format!("'{}' is not a valid ColorKeyMode. Try rgb_eq:R;G;B where R,G,B are int-u8, or rgb_rng:R1;R2;G1;G2;B1;B2 where R1,R2,G1,G2,B1,B2 are int-u8.", identifier), })
                     }
-                        },
-                    }),
-                    _ => return Err(ParserError::UnknownEffect(effect_name)),
-                },
-            )
-        }
-        "Text" => {
-            let font_path = parse_path(chars)?;
-            let font_index = parse_vid_int(chars)?;
-            let color = crate::types::Color::parse(chars)?;
-            let mut text = crate::content::text::Text::new(match chars.next() {
-                Some('s') => crate::content::text::TextType::Static(parse_string(chars)?),
-                Some('!') => {
+                            },
+                        }),
+                        _ => return Err(ParserError::UnknownEffect(effect_name)),
+                    },
+                )
+            }
+            "Text" => {
+                let font_path = parse_path(chars)?;
+                let font_index = parse_vid_int(chars)?;
+                let color = crate::types::Color::parse(chars)?;
+                let mut text = crate::content::text::Text::new(
                     match chars.next() {
-                        Some(_) => {
-                            // TODO: add more modes and options for args and stuff, also add an error for wrong char here
-                            let path = parse_path(chars)?;
-                            crate::content::text::TextType::Program(
-                                crate::external_program::ExternalProgram::new(
-                                    path,
-                                    crate::external_program::ExternalProgramMode::RunOnceArg,
-                                ),
-                            )
+                        Some('s') => crate::content::text::TextType::Static(parse_string(chars)?),
+                        Some('!') => {
+                            match chars.next() {
+                                Some(_) => {
+                                    // TODO: add more modes and options for args and stuff, also add an error for wrong char here
+                                    let path = parse_path(chars)?;
+                                    crate::content::text::TextType::Program(
+                                    crate::external_program::ExternalProgram::new(
+                                        path,
+                                        crate::external_program::ExternalProgramMode::RunOnceArg,
+                                    ),
+                                )
+                                }
+                                None => return Err(ParserError::UnexpectedEOF),
+                            }
                         }
+                        Some(c) => return Err(ParserError::InvalidTextType(c)),
                         None => return Err(ParserError::UnexpectedEOF),
+                    },
+                    generic_content_data.reset(),
+                );
+                text.set_color(color);
+                if let Ok(file) = std::fs::read(&font_path) {
+                    if let Some(font) = rusttype::Font::try_from_vec_and_index(file, font_index) {
+                        text.set_font(font.into());
+                    } else {
+                        println!(
+                            "Font '{}' could not be parsed (using the ttf_parser crate)",
+                            font_path.to_string_lossy().as_ref()
+                        );
                     }
-                }
-                Some(c) => return Err(ParserError::InvalidTextType(c)),
-                None => return Err(ParserError::UnexpectedEOF),
-            });
-            text.set_color(color);
-            if let Ok(file) = std::fs::read(&font_path) {
-                if let Some(font) = rusttype::Font::try_from_vec_and_index(file, font_index) {
-                    text.set_font(font.into());
                 } else {
                     println!(
-                        "Font '{}' could not be parsed (using the ttf_parser crate)",
+                        "Font file '{}' does not exist!",
                         font_path.to_string_lossy().as_ref()
                     );
-                }
-            } else {
-                println!(
-                    "Font file '{}' does not exist!",
-                    font_path.to_string_lossy().as_ref()
-                );
-            };
-            VideoTypeEnum::Text(text)
-        }
-        "Image" => {
-            let mut img = crate::content::image::Image::new(parse_path(chars)?);
-            if let Some('<') = chars.next() {
-                let cmd = parse_string(chars)?;
-                let mut args = vec![];
-                while let Some('+') = chars.next() {
-                    args.push(parse_string(chars)?);
-                }
-                eprintln!(
-                    "PARSER: External img command: {:?} with args {:?}",
-                    cmd, args
-                );
-                img.external_command = Some((cmd, args));
+                };
+                VideoTypeEnum::Text(text)
             }
-            VideoTypeEnum::Image(img)
-        }
-        "VidFromImagesInDirectory" => {
-            let directory = parse_path(chars)?;
-            let crop = {
-                let mut first = String::new();
-                let mut second = String::new();
-                let mut rev = None;
-                loop {
-                    match chars.next() {
-                        Some('-') => {
-                            if rev.is_none() {
-                                rev = Some(false);
-                            }
-                        }
-                        Some('+') => {
-                            if rev.is_none() {
-                                rev = Some(true);
-                            }
-                        }
-                        Some(';') => break,
-                        Some(c) => match rev {
-                            None => first.push(c),
-                            Some(_) => second.push(c),
-                        },
-                        None => return Err(ParserError::UnexpectedEOF),
+            "Image" => {
+                let mut img = crate::content::image::Image::new(
+                    parse_path(chars)?,
+                    generic_content_data.reset(),
+                );
+                if let Some('<') = chars.next() {
+                    let cmd = parse_string(chars)?;
+                    let mut args = vec![];
+                    while let Some('+') = chars.next() {
+                        args.push(parse_string(chars)?);
                     }
+                    eprintln!(
+                        "PARSER: External img command: {:?} with args {:?}",
+                        cmd, args
+                    );
+                    img.external_command = Some((cmd, args));
                 }
-                if let Some(rev) = rev {
-                    // TODO: better errors (not just parse int error)?
-                    let frame1: u32 = match first.parse() {
-                        Ok(v) => v,
-                        Err(e) => return Err(ParserError::ParseIntError(first, e)),
-                    };
-                    let frame2: u32 = match second.parse() {
-                        Ok(v) => v,
-                        Err(e) => return Err(ParserError::ParseIntError(second, e)),
-                    };
-                    (frame1, frame2, rev)
-                } else {
-                    return Err(ParserError::VideoFileFailedToParseStartOrEndFrame(
+                VideoTypeEnum::Image(img)
+            }
+            "VidFromImagesInDirectory" => {
+                let directory = parse_path(chars)?;
+                let crop = {
+                    let mut first = String::new();
+                    let mut second = String::new();
+                    let mut rev = None;
+                    loop {
+                        match chars.next() {
+                            Some('-') => {
+                                if rev.is_none() {
+                                    rev = Some(false);
+                                }
+                            }
+                            Some('+') => {
+                                if rev.is_none() {
+                                    rev = Some(true);
+                                }
+                            }
+                            Some(';') => break,
+                            Some(c) => match rev {
+                                None => first.push(c),
+                                Some(_) => second.push(c),
+                            },
+                            None => return Err(ParserError::UnexpectedEOF),
+                        }
+                    }
+                    if let Some(rev) = rev {
+                        // TODO: better errors (not just parse int error)?
+                        let frame1: u32 = match first.parse() {
+                            Ok(v) => v,
+                            Err(e) => return Err(ParserError::ParseIntError(first, e)),
+                        };
+                        let frame2: u32 = match second.parse() {
+                            Ok(v) => v,
+                            Err(e) => return Err(ParserError::ParseIntError(second, e)),
+                        };
+                        (frame1, frame2, rev)
+                    } else {
+                        return Err(ParserError::VideoFileFailedToParseStartOrEndFrame(
                         "the two numbers were not separated by a + or - symbol. (';' too early)"
                             .to_string(),
                     ));
-                }
-            };
-            VideoTypeEnum::Raw(
-                match InputVideo::new_from_directory_full_of_frames(directory.clone(), crop) {
-                    Ok(v) => v,
-                    Err(err) => {
-                        return Err(ParserError::DirectoryWithImagesNotFound(directory, err))
                     }
-                },
-            )
-        }
-        "VidUsingFfmpeg" => VideoTypeEnum::Ffmpeg(crate::content::ffmpeg_vid::FfmpegVid::new(
-            parse_path(chars)?,
-        )),
-        _ => return Err(ParserError::InvalidVideoType(identifier)),
-    }));
+                };
+                VideoTypeEnum::Raw(
+                    match InputVideo::new_from_directory_full_of_frames(
+                        directory.clone(),
+                        crop,
+                        generic_content_data.reset(),
+                    ) {
+                        Ok(v) => v,
+                        Err(err) => {
+                            return Err(ParserError::DirectoryWithImagesNotFound(directory, err))
+                        }
+                    },
+                )
+            }
+            "VidUsingFfmpeg" => VideoTypeEnum::Ffmpeg(crate::content::ffmpeg_vid::FfmpegVid::new(
+                parse_path(chars)?,
+                generic_content_data.reset(),
+            )),
+            _ => return Err(ParserError::InvalidVideoType(identifier)),
+        },
+        generic_content_data,
+    ));
 }
 
 pub fn parse_vid_curve(chars: &mut Chars) -> Result<Curve, ParserError> {

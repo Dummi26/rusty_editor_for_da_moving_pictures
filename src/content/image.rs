@@ -6,7 +6,7 @@ use std::{
 
 use image::{imageops::FilterType, DynamicImage};
 
-use super::content::Content;
+use super::content::{Content, GenericContentData};
 
 pub struct Image {
     path: PathBuf,
@@ -25,7 +25,7 @@ pub struct ImageChanges {
 }
 impl Content for Image {
     fn clone_no_caching(&self) -> Self {
-        Self::new(self.path.clone())
+        Self::new(self.path.clone(), self.generic_content_data.reset())
     }
 
     fn children(&self) -> Vec<&Self> {
@@ -52,7 +52,7 @@ impl Content for Image {
     }
 }
 impl Image {
-    pub fn new(path: PathBuf) -> Self {
+    pub fn new(path: PathBuf, generic_content_data: GenericContentData) -> Self {
         Self {
             path,
             failed_to_load_image: false,
@@ -61,7 +61,7 @@ impl Image {
             img_original: None,
             img_scaled: None,
             as_content_changes: ImageChanges::default(),
-            generic_content_data: crate::content::content::GenericContentData::default(),
+            generic_content_data,
         }
     }
 }

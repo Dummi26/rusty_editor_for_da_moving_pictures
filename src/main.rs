@@ -1,20 +1,20 @@
 use crate::cli::Clz;
 
-mod useful;
+mod assets;
 mod cli;
-mod video;
-mod video_render_settings;
-mod video_export_settings;
 mod content;
-mod effect;
 mod curve;
-mod project;
+mod effect;
+mod external_program;
+mod files;
 mod gui;
 mod multithreading;
-mod files;
-mod assets;
+mod project;
 mod types;
-mod external_program;
+mod useful;
+mod video;
+mod video_export_settings;
+mod video_render_settings;
 
 // ffmpeg -i vids/video.mp4 path/%09d.png
 
@@ -22,7 +22,7 @@ mod external_program;
 
 fn main() {
     let mut args = cli::CustomArgs::read_from_env();
-    if let Err(e) = std::fs::create_dir_all("/tmp/dummi26/rusty_editor_for_da_moving_pictures/") {
+    if let Err(_e) = std::fs::create_dir_all("/tmp/dummi26/rusty_editor_for_da_moving_pictures/") {
         println!("Failed to setup /tmp/... dir. This might cause some functionality that relies on /tmp/... to break, but is not necessarily fatal.");
     }
     //
@@ -36,16 +36,20 @@ fn main() {
                     cli::Action::ExportProjectToFrames => export_to_frames(args),
                     cli::Action::Exit => break,
                 }
-            },
-            None => panic!("\n{}\n",
-                Clz::error_info("No action was specified! Please use --action [action] to specify one."),
+            }
+            None => panic!(
+                "\n{}\n",
+                Clz::error_info(
+                    "No action was specified! Please use --action [action] to specify one."
+                ),
             ),
         };
-    };
+    }
 }
 
 fn export_to_frames(args: cli::CustomArgs) -> cli::CustomArgs {
-    eprintln!("{}\n{}",
+    eprintln!(
+        "{}\n{}",
         Clz::starting("Starting export..."),
         Clz::starting(" [1] Loading project."),
     );
@@ -72,7 +76,8 @@ fn export_to_frames(args: cli::CustomArgs) -> cli::CustomArgs {
         ),
         Ok(Ok(v)) => v,
     };
-    eprintln!("{}\n{}",
+    eprintln!(
+        "{}\n{}",
         Clz::completed(" [1] Loaded project."),
         Clz::starting(" [2] Starting export."),
     );

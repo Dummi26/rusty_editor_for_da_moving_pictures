@@ -4,7 +4,7 @@ use image::DynamicImage;
 use crate::project::Project;
 
 pub fn export_to_dir(proj: &Project, settings: &crate::video_export_settings::VideoExportSettings) {
-    let vid = &proj.vid;
+    let vid = &proj.vid();
     let mut vid = vid.lock().unwrap();
     let mut pprogress_percent = u32::MAX;
     for frame in 0..settings.frames {
@@ -23,11 +23,20 @@ pub fn export_to_dir(proj: &Project, settings: &crate::video_export_settings::Vi
                     Clz::error_info("The project you are trying to export does not specify any export settings. Please configure the project's export configuration and try again."),
                 ),
             });
-            let path = { /* 10 long (u32 max length) */ let mut p = settings.output_path.clone(); p.push(format!("{:010}.png", frame)); p };
+            let path = {
+                /* 10 long (u32 max length) */
+                let mut p = settings.output_path.clone();
+                p.push(format!("{:010}.png", frame));
+                p
+            };
             if let Err(err) = img.save(&path) {
-                panic!("\n{}{}{}\n{}{}\n",
-                    Clz::error_info("Error saving image file to path '"), Clz::undecided(path.to_string_lossy().as_ref()), Clz::error_info("'."),
-                    Clz::error_info("Error: "), Clz::error_details(err.to_string().as_str()),
+                panic!(
+                    "\n{}{}{}\n{}{}\n",
+                    Clz::error_info("Error saving image file to path '"),
+                    Clz::undecided(path.to_string_lossy().as_ref()),
+                    Clz::error_info("'."),
+                    Clz::error_info("Error: "),
+                    Clz::error_details(err.to_string().as_str()),
                 );
             }
         }

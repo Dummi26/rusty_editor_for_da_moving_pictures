@@ -27,7 +27,11 @@ impl<'a> Cli<'a> {
             },
         };
         let project = match crate::files::file_handler::read_from_file(path) {
-            Err(io_error) => panic!("Could not load '{}'. Are you sure the file exists? (Error: {})", path.to_string_lossy().to_string(), io_error),
+            Err(io_error) => panic!(
+                "Could not load '{}'. Are you sure the file exists? (Error: {})",
+                path.to_string_lossy().to_string(),
+                io_error
+            ),
             Ok(Err(parser_error)) => panic!("Could not parse file: {}", parser_error),
             Ok(Ok(project)) => project,
         };
@@ -47,29 +51,52 @@ impl<'a> Cli<'a> {
 
     fn run(&mut self) {
         loop {
-            print!("{}:\n>>", self.color(self.project_name.as_str(), ColorStyle::ProjectName));
+            print!(
+                "{}:\n>>",
+                self.color(self.project_name.as_str(), ColorStyle::ProjectName)
+            );
             self.flush();
             match self.get_line() {
                 Ok(line) => match line {
                     CliLine::Exit => break,
                     CliLine::Export(time, w, h, path) => {
-                        let mut vid = self.project.vid.lock().unwrap();
+                        let vid = self.project.vid();
+                        let mut vid = vid.lock().unwrap();
                         if let Some(prep_draw) = vid.prep_draw(time, None) {
                             let mut image = image::DynamicImage::new_rgba8(w, h);
-                            let mut settings = crate::video_render_settings::VideoRenderSettings::export(crate::video_render_settings::FrameRenderInfo::new(w as f64 / h as f64));
+                            let mut settings =
+                                crate::video_render_settings::VideoRenderSettings::export(
+                                    crate::video_render_settings::FrameRenderInfo::new(
+                                        w as f64 / h as f64,
+                                    ),
+                                );
                             vid.draw(&mut image, prep_draw, &mut settings);
                             if let Err(e) = image.save(&path) {
-                                println!("{} {}: {}", self.color("Failed to save image as", ColorStyle::FailError), self.color(path.as_str(), ColorStyle::FailError), self.color(format!("{}", e).as_str(), ColorStyle::FailError));
+                                println!(
+                                    "{} {}: {}",
+                                    self.color("Failed to save image as", ColorStyle::FailError),
+                                    self.color(path.as_str(), ColorStyle::FailError),
+                                    self.color(format!("{}", e).as_str(), ColorStyle::FailError)
+                                );
                             }
                         } else {
-                            println!("{}", self.color("Could not prepare drawing.", ColorStyle::FailError));
+                            println!(
+                                "{}",
+                                self.color("Could not prepare drawing.", ColorStyle::FailError)
+                            );
                         }
-                    },
+                    }
                 },
                 Err((e, fatal)) => {
-                    println!("[unknown] {} {}", self.color("Failed to parse command:", ColorStyle::FailUnknown), self.color(e.as_str(), ColorStyle::FailUnknown));
-                    if fatal { break; }
-                },
+                    println!(
+                        "[unknown] {} {}",
+                        self.color("Failed to parse command:", ColorStyle::FailUnknown),
+                        self.color(e.as_str(), ColorStyle::FailUnknown)
+                    );
+                    if fatal {
+                        break;
+                    }
+                }
             }
         }
         println!("Goodbye!");
@@ -82,7 +109,9 @@ impl<'a> Cli<'a> {
                 ColorStyle::FailUnknown => colored::Colorize::magenta(txt).to_string(),
                 ColorStyle::FailError => colored::Colorize::red(txt).to_string(),
             }
-        } else { txt.to_string() }
+        } else {
+            txt.to_string()
+        }
     }
 
     fn get_line(&mut self) -> Result<CliLine, (String, bool)> {
@@ -103,24 +132,48 @@ impl<'a> Cli<'a> {
                     if let Some(ch) = ch {
                         if !backslash_escape {
                             match ch {
-                                '\\' => if string_mode { backslash_escape = true; } else { buf.push(ch); },
-                                '"' => { string_mode = !string_mode; },
-                                ' ' => if !string_mode { done = true; },
-                                _ => { buf.push(ch); },
+                                '\\' => {
+                                    if string_mode {
+                                        backslash_escape = true;
+                                    } else {
+                                        buf.push(ch);
+                                    }
+                                }
+                                '"' => {
+                                    string_mode = !string_mode;
+                                }
+                                ' ' => {
+                                    if !string_mode {
+                                        done = true;
+                                    }
+                                }
+                                _ => {
+                                    buf.push(ch);
+                                }
                             }
-                        } else { // '\'-escaped
+                        } else {
+                            // '\'-escaped
                             match ch {
                                 '\\' => buf.push('\\'),
                                 'n' => buf.push('\n'),
                                 't' => buf.push('\t'),
                                 '"' => buf.push('"'),
-                                _ => return Err((format!("Invalid backslash escape sequence '\\{}'!", ch), false)),
+                                _ => {
+                                    return Err((
+                                        format!("Invalid backslash escape sequence '\\{}'!", ch),
+                                        false,
+                                    ))
+                                }
                             }
                         }
-                    } else { done = true; }
+                    } else {
+                        done = true;
+                    }
                     if done {
                         parts.push(std::mem::replace(&mut buf, String::new()));
-                        if ch.is_none() { break; };
+                        if ch.is_none() {
+                            break;
+                        };
                     }
                 }
             }
@@ -129,7 +182,9 @@ impl<'a> Cli<'a> {
                 match first.to_lowercase().as_str() {
                     "exit" => return Ok(CliLine::Exit),
                     "export_frame" | "export frame" => {
-                        if let (Some(t), Some(w), Some(h), Some(path)) = (parts.get(1), parts.get(2), parts.get(3), parts.get(4)) {
+                        if let (Some(t), Some(w), Some(h), Some(path)) =
+                            (parts.get(1), parts.get(2), parts.get(3), parts.get(4))
+                        {
                             if let (Ok(time), Ok(w), Ok(h)) = (t.parse(), w.parse(), h.parse()) {
                                 Ok(CliLine::Export(time, w, h, path.to_string()))
                             } else {
